@@ -178,7 +178,15 @@ export default function FriendsScreen(): JSX.Element {
             <span className="muted small">Ваш код друга</span>
             <div className="friend-code">{identity.friendCode}</div>
           </div>
-          <Button variant="subtle" onClick={() => { navigator.clipboard.writeText(identity.friendCode); toast('Код скопирован.', 'success') }}>
+          <Button
+            variant="subtle"
+            onClick={() => {
+              api.copyText(identity.friendCode).then(
+                () => toast('Код скопирован.', 'success'),
+                () => toast('Не удалось скопировать код.', 'error')
+              )
+            }}
+          >
             Скопировать
           </Button>
           <span className="muted small">Вы: {identity.username}</span>
