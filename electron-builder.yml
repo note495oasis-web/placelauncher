@@ -1,0 +1,27 @@
+appId: com.aurora.launcher
+productName: Aurora Launcher
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+asarUnpack:
+  - resources/**
+win:
+  target:
+    - nsis
+    - nsis-web
+  artifactName: ${name}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: Aurora Launcher
+nsisWeb:
+  artifactName: ${name}-${version}-web-setup.${ext}
+publish:
+  provider: github
+  owner: note495oasis-web
+  repo: aurora-launcher
