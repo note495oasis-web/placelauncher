@@ -324,6 +324,6 @@ const heartbeat = setInterval(() => {
 
 server.on('close', () => clearInterval(heartbeat))
 server.listen(PORT, () => {
-  console.log(`Aurora friends server listening on :${PORT}`)
+  console.log(`PlaceLauncher friends server listening on :${PORT}`)
   console.log(`Limits: uploads=${UPLOADS_PER_WEEK}/week imports=${IMPORTS_PER_WEEK}/week`)
 })

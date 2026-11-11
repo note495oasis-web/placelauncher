@@ -81,6 +81,11 @@ async function backendRequest<T>(method: string, path: string, body?: unknown, a
     // non-JSON error body
   }
   if (res.status < 200 || res.status >= 300) {
+    if (auth && res.status === 401) {
+      friends.logout()
+      friends.emit('session-expired')
+      throw new Error('Сессия друзей устарела (сервер перезапустился). Создайте профиль заново.')
+    }
     const message = json && typeof json.error === 'string' ? json.error : `Ошибка сервера (HTTP ${res.status}).`
     throw new Error(message)
   }

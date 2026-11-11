@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, clipboard, shell } from 'electron'
+import { log, logLines, getLogs, clearLogs, saveLogs } from './logger'
 import { getSettings, setSettings, type Settings } from './store'
 import { testEndpoint, refreshPool, poolStatus, type ProxyEndpoint } from './net/proxy'
 import { loginWithDeviceCode } from './auth/microsoft'
@@ -56,6 +57,12 @@ export function registerIpc(): void {
   initFriendsEvents()
   ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.handle('clipboard:write', (_event, text: string) => clipboard.writeText(text))
+  ipcMain.handle('logs:get', () => getLogs())
+  ipcMain.handle('logs:clear', () => {
+    clearLogs()
+    return true
+  })
+  ipcMain.handle('logs:save', () => saveLogs())
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:set', (_event, patch: Partial<Settings>) => setSettings(patch))
 
@@ -113,17 +120,28 @@ export function registerIpc(): void {
   })
   ipcMain.handle('game:launch', (_event, req: LaunchRequest) => {
     const win = BrowserWindow.getAllWindows()[0]
+    log('info', 'launcher', `Запуск экземпляра «${req.instanceName}»${req.versionId ? ` (${req.versionId})` : ''}`)
     onGameLaunch({ versionId: req.versionId, instanceName: req.instanceName })
     return launchInstance(
       req,
       (p) => win?.webContents.send('game:progress', p),
       (line) => {
+        logLines('game', 'game', line)
         win?.webContents.send('game:log', line)
         onGameLog(line, { versionId: req.versionId, instanceName: req.instanceName })
       }
     )
+      .then((code) => {
+        log('info', 'launcher', `Игра завершена (код ${code})`)
+        return code
+      })
+      .catch((err) => {
+        log('error', 'launcher', err instanceof Error ? err.message : String(err))
+        throw err
+      })
   })
   ipcMain.handle('game:stop', () => {
+    log('info', 'launcher', 'Остановка игры')
     stopGame()
     onGameStop()
     return true
@@ -183,9 +201,18 @@ export function registerIpc(): void {
     deleteInstance(name)
     return listInstances()
   })
+  ipcMain.handle('instance:openFolder', (_event, name: string) => shell.openPath(instanceDir(name)))
 
   ipcMain.handle('import:scan', () => scanAllLaunchers())
-  ipcMain.handle('import:prism', (_event, info: PrismInstanceInfo) => importPrismInstance(info))
+  ipcMain.handle('import:prism', async (_event, info: PrismInstanceInfo) => {
+    log('info', 'import', `Импорт из Prism: «${info.name}» (${info.versionId})`)
+    const inst = await importPrismInstance(info, (done, total) => {
+      if (done === total || done % 10 === 0) log('info', 'import', `Загрузка модов CurseForge: ${done}/${total}`)
+    })
+    const mods = listContentFiles(instanceDir(inst.name), 'mods').length
+    log('info', 'import', `Импортировано «${inst.name}»: модов ${mods}`)
+    return inst
+  })
 
   ipcMain.handle('modpack:tracked', (_event, name: string) => listTracked(name))
   ipcMain.handle('modpack:export', (_event, name: string) => exportModpack(name))

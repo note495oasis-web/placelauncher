@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, errText, formatBytes, formatDownloads } from '../lib'
 import { useToast } from './toast'
 import { Button, TextInput, Select, Spinner, EmptyState } from './ui'
@@ -20,6 +20,7 @@ export default function ModPicker({
   busyId,
   onPick
 }: ModPickerProps): JSX.Element {
+  const PAGE = 24
   const toast = useToast()
   const [source, setSource] = useState<'modrinth' | 'curseforge'>('modrinth')
   const [query, setQuery] = useState('')
@@ -29,13 +30,18 @@ export default function ModPicker({
   const [selected, setSelected] = useState<ModProject | null>(null)
   const [files, setFiles] = useState<ModFile[]>([])
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const offsetRef = useRef(0)
+  const loadingMoreRef = useRef(false)
 
   useEffect(() => {
     search()
-  }, [source])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, projectType, gameVersion, loader])
 
   function opts(): Record<string, unknown> {
-    const o: Record<string, unknown> = { projectType, limit: 24 }
+    const o: Record<string, unknown> = { projectType, limit: PAGE }
     if (gameVersion) o.gameVersion = gameVersion
     if (projectType === 'mod' && loader) o.loader = loader
     return o
@@ -45,14 +51,43 @@ export default function ModPicker({
     setSearching(true)
     setSearched(true)
     setSelected(null)
+    setHasMore(true)
+    offsetRef.current = 0
     try {
-      setResults(await api.searchMods(source, query, opts()))
+      const page = await api.searchMods(source, query, { ...opts(), offset: 0 })
+      setResults(page)
+      offsetRef.current = page.length
+      setHasMore(page.length >= PAGE)
     } catch (e) {
       toast(errText(e), 'error')
       setResults([])
+      setHasMore(false)
     } finally {
       setSearching(false)
     }
+  }
+
+  async function loadMore(): Promise<void> {
+    if (loadingMoreRef.current || !hasMore || searching || selected) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    try {
+      const page = await api.searchMods(source, query, { ...opts(), offset: offsetRef.current })
+      setResults((prev) => [...prev, ...page])
+      offsetRef.current += page.length
+      if (page.length < PAGE) setHasMore(false)
+    } catch (e) {
+      toast(errText(e), 'error')
+      setHasMore(false)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }
+
+  function onGridScroll(e: React.UIEvent<HTMLDivElement>): void {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) void loadMore()
   }
 
   async function openProject(p: ModProject): Promise<void> {
@@ -115,7 +150,7 @@ export default function ModPicker({
       ) : results.length === 0 ? (
         searched ? <EmptyState title="Ничего не найдено" /> : <p className="muted small">Введите запрос и нажмите «Найти».</p>
       ) : (
-        <div className="mod-grid">
+        <div className="mod-grid" onScroll={onGridScroll}>
           {results.map((p) => (
             <div key={p.id} className="mod-card" onClick={() => openProject(p)}>
               {p.iconUrl ? <img className="mod-icon" src={p.iconUrl} alt="" /> : <div className="mod-icon mod-icon-fallback">▦</div>}
@@ -126,6 +161,12 @@ export default function ModPicker({
               </div>
             </div>
           ))}
+          {loadingMore && (
+            <div className="grid-footer"><Spinner label="Подгрузка ещё…" /></div>
+          )}
+          {!hasMore && !loadingMore && results.length > 0 && (
+            <div className="grid-footer muted small">Это все результаты</div>
+          )}
         </div>
       )}
     </div>

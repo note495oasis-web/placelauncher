@@ -1,7 +1,7 @@
 {
-  "name": "aurora-friends-server",
+  "name": "placelauncher-friends-server",
   "version": "0.1.0",
-  "description": "Friends presence, modpack sharing and LAN-over-WebSocket tunnel for Aurora Launcher",
+  "description": "Friends presence, modpack sharing and LAN-over-WebSocket tunnel for PlaceLauncher",
   "type": "module",
   "main": "index.js",
   "engines": {

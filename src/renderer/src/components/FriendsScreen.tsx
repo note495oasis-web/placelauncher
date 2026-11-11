@@ -59,6 +59,13 @@ export default function FriendsScreen(): JSX.Element {
       })
     })
     api.onFriendsConnection((c) => setConnected(c.connected))
+    api.onFriendsSessionExpired(() => {
+      setIdentity(null)
+      setFriends([])
+      setWorlds({})
+      setConnected(false)
+      toast('Сессия друзей устарела — сервер перезапустился. Создайте профиль заново.', 'error')
+    })
     api.onJoined((info) => setJoinInfo(info))
     api.onModpackProgress((p) => setImportProgress(p))
     return () => {
@@ -155,7 +162,7 @@ export default function FriendsScreen(): JSX.Element {
           <h3>Создайте профиль</h3>
           <p className="muted">
             Профиль хранится на сервере друзей. Убедитесь, что адрес сервера указан в настройках
-            (например https://aurora-friends.onrender.com).
+            (например https://ваш-сервер.onrender.com).
           </p>
           <Field label="Ваш ник" hint="3-24 символа: латиница, цифры, _">
             <TextInput value={registerName} onChange={(e) => setRegisterName(e.target.value)} placeholder="Steve" />

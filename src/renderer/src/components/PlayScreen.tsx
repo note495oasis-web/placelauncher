@@ -23,6 +23,7 @@ export default function PlayScreen({
   const [importOpen, setImportOpen] = useState(false)
   const [importable, setImportable] = useState<ImportableInstance[]>([])
   const [scanning, setScanning] = useState(false)
+  const [importing, setImporting] = useState<string | null>(null)
 
   const [shareCode, setShareCode] = useState<string | null>(null)
   const [sharing, setSharing] = useState(false)
@@ -64,13 +65,17 @@ export default function PlayScreen({
   }
 
   async function importOne(info: ImportableInstance): Promise<void> {
+    setImporting(info.path)
     try {
-      await api.importPrism(info)
-      toast(`Импортировано: ${info.name}`, 'success')
+      const inst = await api.importPrism(info)
+      const mods = await api.listContent(inst.name, 'mods').catch(() => [] as string[])
+      toast(`Импортировано: ${info.name} (модов: ${mods.length})`, 'success')
       setImportable((prev) => prev.filter((i) => i.path !== info.path))
       await refresh()
     } catch (e) {
       toast(errText(e), 'error')
+    } finally {
+      setImporting(null)
     }
   }
 
@@ -174,6 +179,15 @@ export default function PlayScreen({
                 </Button>
                 <Button variant="subtle" onClick={() => setEditing(inst)}>Редактировать</Button>
                 <Button variant="subtle" onClick={() => share(inst)} disabled={sharing}>Поделиться</Button>
+                <Button
+                  variant="subtle"
+                  onClick={async () => {
+                    const err = await api.openInstanceFolder(inst.name)
+                    if (err) toast(err, 'error')
+                  }}
+                >
+                  Папка
+                </Button>
                 <Button variant="ghost" onClick={() => remove(inst)}>Удалить</Button>
               </div>
             </div>
@@ -195,7 +209,9 @@ export default function PlayScreen({
                   <span className="muted small">{info.versionId}{info.loader ? ` · ${info.loader.type}` : ''}</span>
                   <span className="muted small">{info.path}</span>
                 </div>
-                <Button variant="subtle" onClick={() => importOne(info)}>Импортировать</Button>
+                <Button variant="subtle" disabled={importing !== null} onClick={() => importOne(info)}>
+                  {importing === info.path ? 'Импорт…' : 'Импортировать'}
+                </Button>
               </div>
             ))}
           </div>

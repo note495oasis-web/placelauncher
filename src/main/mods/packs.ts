@@ -75,7 +75,7 @@ export async function installModrinthPack(
   title: string,
   onProgress?: PackProgress
 ): Promise<PackInstallResult> {
-  const tmp = join(tmpdir(), `aurora-pack-${Date.now()}.mrpack`)
+  const tmp = join(tmpdir(), `placelauncher-pack-${Date.now()}.mrpack`)
   await download(url, tmp)
   let inst: Instance | null = null
   try {
@@ -143,12 +143,52 @@ interface CfManifest {
   files?: { projectID: number; fileID: number; required?: boolean }[]
 }
 
+async function fillCurseforgePack(
+  dir: string,
+  zip: AdmZip,
+  man: CfManifest,
+  instanceName: string,
+  onProgress?: PackProgress
+): Promise<{ downloaded: number; skipped: number }> {
+  mkdirSync(join(dir, 'mods'), { recursive: true })
+  const files = man.files ?? []
+  let done = 0
+  let skipped = 0
+  let downloaded = 0
+  for (const f of files) {
+    let cf: { url: string; filename: string; size: number } | null = null
+    try {
+      cf = await getCurseforgeFile(String(f.projectID), String(f.fileID))
+    } catch {
+      cf = null
+    }
+    if (!cf?.url) {
+      skipped++
+      onProgress?.(++done, files.length)
+      continue
+    }
+    await download(cf.url, join(dir, 'mods', cf.filename))
+    recordInstall(instanceName, {
+      source: 'curseforge',
+      projectId: String(f.projectID),
+      filename: cf.filename,
+      url: cf.url,
+      subdir: 'mods',
+      size: cf.size
+    })
+    downloaded++
+    onProgress?.(++done, files.length)
+  }
+  extractOverrides(zip, dir, man.overrides ?? 'overrides')
+  return { downloaded, skipped }
+}
+
 export async function installCurseforgePack(
   url: string,
   title: string,
   onProgress?: PackProgress
 ): Promise<PackInstallResult> {
-  const tmp = join(tmpdir(), `aurora-pack-${Date.now()}.zip`)
+  const tmp = join(tmpdir(), `placelauncher-pack-${Date.now()}.zip`)
   await download(url, tmp)
   let inst: Instance | null = null
   try {
@@ -173,39 +213,32 @@ export async function installCurseforgePack(
       loader,
       source: 'curseforge-pack'
     })
-    const dir = instanceDir(inst.name)
-    mkdirSync(join(dir, 'mods'), { recursive: true })
-    const files = man.files ?? []
-    let done = 0
-    let skipped = 0
-    for (const f of files) {
-      let cf: { url: string; filename: string; size: number } | null = null
-      try {
-        cf = await getCurseforgeFile(String(f.projectID), String(f.fileID))
-      } catch {
-        cf = null
-      }
-      if (!cf?.url) {
-        skipped++
-        onProgress?.(++done, files.length)
-        continue
-      }
-      await download(cf.url, join(dir, 'mods', cf.filename))
-      recordInstall(inst.name, {
-        source: 'curseforge',
-        projectId: String(f.projectID),
-        filename: cf.filename,
-        url: cf.url,
-        subdir: 'mods',
-        size: cf.size
-      })
-      onProgress?.(++done, files.length)
-    }
-    extractOverrides(zip, dir, man.overrides ?? 'overrides')
+    const { skipped } = await fillCurseforgePack(instanceDir(inst.name), zip, man, inst.name, onProgress)
     return { instance: inst, skipped }
   } catch (e) {
     if (inst) deleteInstance(inst.name)
     throw e
+  } finally {
+    rmSync(tmp, { force: true })
+  }
+}
+
+export async function fetchCurseforgePackMods(
+  packId: string,
+  fileId: string,
+  instanceName: string,
+  onProgress?: PackProgress
+): Promise<{ downloaded: number; skipped: number }> {
+  const cf = await getCurseforgeFile(packId, fileId)
+  if (!cf.url) return { downloaded: 0, skipped: 0 }
+  const tmp = join(tmpdir(), `placelauncher-import-${Date.now()}.zip`)
+  await download(cf.url, tmp)
+  try {
+    const zip = new AdmZip(tmp)
+    const entry = zip.getEntry('manifest.json')
+    if (!entry) return { downloaded: 0, skipped: 0 }
+    const man = JSON.parse(entry.getData().toString('utf8')) as CfManifest
+    return await fillCurseforgePack(instanceDir(instanceName), zip, man, instanceName, onProgress)
   } finally {
     rmSync(tmp, { force: true })
   }

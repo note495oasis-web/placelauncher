@@ -19,6 +19,7 @@ export function initFriendsEvents(): void {
   eventsWired = true
   friends.on('connected', () => send('friends:connection', { connected: true }))
   friends.on('disconnected', () => send('friends:connection', { connected: false }))
+  friends.on('session-expired', () => send('friends:session-expired', null))
   friends.on('friends', (msg) => send('friends:list', msg.friends))
   friends.on('presence', (msg) => send('friends:presence', msg))
   friends.on('world', (msg: WorldInfo) => {

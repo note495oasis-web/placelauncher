@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react'
+import { Children, isValidElement, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { createPortal } from 'react-dom'
 
 export function Button({
   variant = 'primary',
@@ -22,8 +23,134 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>): JSX.Ele
   return <input className="input" {...props} />
 }
 
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>): JSX.Element {
-  return <select className="input" {...props} />
+export function Toggle({
+  checked,
+  onChange,
+  label,
+  hint
+}: {
+  checked: boolean
+  onChange: (value: boolean) => void
+  label: ReactNode
+  hint?: string
+}): JSX.Element {
+  return (
+    <label className="toggle">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="toggle-track"><span className="toggle-thumb" /></span>
+      <span className="toggle-text">
+        <span className="toggle-label">{label}</span>
+        {hint && <span className="toggle-hint">{hint}</span>}
+      </span>
+    </label>
+  )
+}
+
+export function Select({
+  value,
+  onChange,
+  children,
+  disabled,
+  className = '',
+  placeholder = '—'
+}: {
+  value: string | number
+  onChange: (e: { target: { value: string } }) => void
+  children: ReactNode
+  disabled?: boolean
+  className?: string
+  placeholder?: string
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const options = useMemo(() => {
+    const out: { value: string; label: ReactNode }[] = []
+    Children.forEach(children, (c) => {
+      if (isValidElement(c) && c.type === 'option') {
+        const p = c.props as { value?: string | number; children?: ReactNode }
+        out.push({ value: String(p.value ?? ''), label: p.children })
+      }
+    })
+    return out
+  }, [children])
+
+  const current = options.find((o) => o.value === String(value))
+
+  useLayoutEffect(() => {
+    if (open && wrapRef.current) setRect(wrapRef.current.getBoundingClientRect())
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const update = (): void => {
+      if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect())
+    }
+    const onDown = (e: MouseEvent): void => {
+      const t = e.target as Node
+      if (!wrapRef.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const spaceBelow = rect ? window.innerHeight - rect.bottom : 0
+  const maxH = Math.max(140, Math.min(320, spaceBelow - 16))
+
+  return (
+    <div className={`select ${className} ${disabled ? 'disabled' : ''}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="input select-trigger"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="select-value">{current ? current.label : placeholder}</span>
+        <span className="select-arrow">▾</span>
+      </button>
+      {open && rect &&
+        createPortal(
+          <div
+            className="select-menu"
+            ref={menuRef}
+            role="listbox"
+            style={{ position: 'fixed', top: rect.bottom + 6, left: rect.left, width: rect.width, maxHeight: maxH, zIndex: 300 }}
+          >
+            {options.map((o) => (
+              <button
+                type="button"
+                key={o.value}
+                role="option"
+                aria-selected={o.value === String(value)}
+                className={`select-option ${o.value === String(value) ? 'active' : ''}`}
+                onClick={() => {
+                  onChange({ target: { value: o.value } })
+                  setOpen(false)
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+    </div>
+  )
 }
 
 export function Modal({

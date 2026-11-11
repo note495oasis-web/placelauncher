@@ -59,7 +59,7 @@ export async function ensureAuthlibInjector(cacheDir: string): Promise<string> {
   if (existsSync(dest)) return dest
   const release = await apiJson<{ assets: { name: string; browser_download_url: string }[] }>(
     'https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest',
-    { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'aurora-launcher' } }
+    { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'placelauncher' } }
   )
   const asset = release.assets.find((a) => a.name.endsWith('.jar'))
   if (!asset) throw new Error('Не найден jar authlib-injector в последнем релизе')

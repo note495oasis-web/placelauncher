@@ -59,6 +59,8 @@ interface ImportableInstance {
   name: string
   versionId: string
   loader?: InstanceLoader
+  flamePackId?: string
+  flameFileId?: string
 }
 
 interface TrackedMod {
@@ -128,6 +130,13 @@ interface UpdateStatus {
   message?: string
 }
 
+interface LogEntry {
+  ts: number
+  level: 'info' | 'warn' | 'error' | 'debug' | 'game'
+  source: string
+  message: string
+}
+
 interface Window {
   launcher: {
     platform: string
@@ -189,6 +198,7 @@ interface Window {
     }): Promise<LauncherInstance>
     updateInstance(name: string, patch: Partial<LauncherInstance>): Promise<LauncherInstance | null>
     deleteInstance(name: string): Promise<LauncherInstance[]>
+    openInstanceFolder(name: string): Promise<string>
     scanImportable(): Promise<ImportableInstance[]>
     importPrism(info: ImportableInstance): Promise<LauncherInstance>
     listTrackedMods(name: string): Promise<TrackedMod[]>
@@ -220,6 +230,7 @@ interface Window {
     onPresence(cb: (info: FriendInfo) => void): void
     onWorld(cb: (info: WorldInfo) => void): void
     onFriendsConnection(cb: (info: { connected: boolean }) => void): void
+    onFriendsSessionExpired(cb: () => void): void
     onHosting(cb: (info: { session: string; port: number } | null) => void): void
     onJoined(cb: (info: { localPort: number } | null) => void): void
     offFriendsEvents(): void
@@ -228,5 +239,10 @@ interface Window {
     installUpdate(): Promise<boolean>
     onUpdateStatus(cb: (status: UpdateStatus) => void): void
     offUpdateStatus(): void
+    getLogs(): Promise<LogEntry[]>
+    clearLogs(): Promise<boolean>
+    saveLogs(): Promise<string | null>
+    onLog(cb: (entry: LogEntry) => void): () => void
+    onLogsCleared(cb: () => void): () => void
   }
 }

@@ -53,7 +53,7 @@ export function buildArgs(opts: LaunchOptions): string[] {
     user_properties: '{}',
     version_type: version.type ?? 'release',
     natives_directory: prepared.nativesDir,
-    launcher_name: 'Aurora',
+    launcher_name: 'PlaceLauncher',
     launcher_version: app.getVersion(),
     classpath: prepared.classpath.join(delimiter),
     classpath_separator: delimiter,

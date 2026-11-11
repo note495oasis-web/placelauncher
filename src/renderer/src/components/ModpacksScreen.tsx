@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, errText, formatBytes, formatDownloads } from '../lib'
 import { useToast } from './toast'
 import { Button, TextInput, Select, SectionTitle, Modal, Spinner, EmptyState } from './ui'
@@ -15,19 +15,53 @@ export default function ModpacksScreen(): JSX.Element {
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const offsetRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const PAGE = 24
 
   async function search(): Promise<void> {
     setSearching(true)
     setSearched(true)
     setSelected(null)
+    setHasMore(true)
+    offsetRef.current = 0
     try {
-      setResults(await api.searchMods(source, query, { projectType: 'modpack', limit: 24 }))
+      const page = await api.searchMods(source, query, { projectType: 'modpack', limit: PAGE, offset: 0 })
+      setResults(page)
+      offsetRef.current = page.length
+      setHasMore(page.length >= PAGE)
     } catch (e) {
       toast(errText(e), 'error')
       setResults([])
+      setHasMore(false)
     } finally {
       setSearching(false)
     }
+  }
+
+  async function loadMore(): Promise<void> {
+    if (loadingMoreRef.current || !hasMore || searching || selected) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    try {
+      const page = await api.searchMods(source, query, { projectType: 'modpack', limit: PAGE, offset: offsetRef.current })
+      setResults((prev) => [...prev, ...page])
+      offsetRef.current += page.length
+      if (page.length < PAGE) setHasMore(false)
+    } catch (e) {
+      toast(errText(e), 'error')
+      setHasMore(false)
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }
+
+  function onGridScroll(e: React.UIEvent<HTMLDivElement>): void {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) void loadMore()
   }
 
   useEffect(() => {
@@ -101,7 +135,7 @@ export default function ModpacksScreen(): JSX.Element {
       ) : results.length === 0 ? (
         searched ? <EmptyState title="Ничего не найдено" text="Попробуйте другой запрос." /> : null
       ) : (
-        <div className="mod-grid">
+        <div className="mod-grid" onScroll={onGridScroll}>
           {results.map((p) => (
             <div key={p.id} className="mod-card" onClick={() => openProject(p)}>
               {p.iconUrl ? <img className="mod-icon" src={p.iconUrl} alt="" /> : <div className="mod-icon mod-icon-fallback">▣</div>}
@@ -112,6 +146,12 @@ export default function ModpacksScreen(): JSX.Element {
               </div>
             </div>
           ))}
+          {loadingMore && (
+            <div className="grid-footer"><Spinner label="Подгрузка ещё…" /></div>
+          )}
+          {!hasMore && !loadingMore && results.length > 0 && (
+            <div className="grid-footer muted small">Это все результаты</div>
+          )}
         </div>
       )}
 

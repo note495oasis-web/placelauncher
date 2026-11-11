@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, errText } from '../lib'
 import { useToast } from './toast'
-import { Button, Field, TextInput, Select, SectionTitle, Badge, Modal, Progress, Spinner } from './ui'
+import { Button, Field, TextInput, Select, SectionTitle, Badge, Modal, Progress, Spinner, Toggle } from './ui'
+import { applyTheme, gradientCss, PRESETS, DEFAULT_THEME, type ThemeSettings } from '../theme'
 
 export interface ProxySettings {
   mode: 'off' | 'manual' | 'auto'
@@ -21,6 +22,7 @@ export interface Settings {
   microsoftClientId: string
   backendUrl: string
   showAllVersions: boolean
+  theme: ThemeSettings
 }
 
 type Account = LauncherAccount
@@ -48,7 +50,12 @@ export default function SettingsScreen(): JSX.Element {
   const [javaProgress, setJavaProgress] = useState<{ received: number; total: number } | null>(null)
 
   useEffect(() => {
-    api.getSettings().then((s) => setSettings(s as unknown as Settings)).catch((e) => toast(errText(e), 'error'))
+    api.getSettings().then((s) => {
+      const parsed = s as unknown as Settings
+      parsed.theme = parsed.theme ?? DEFAULT_THEME
+      setSettings(parsed)
+      applyTheme(parsed.theme)
+    }).catch((e) => toast(errText(e), 'error'))
     refreshAccounts()
     api.onJavaProgress((p) => setJavaProgress(p))
     return () => {
@@ -73,6 +80,14 @@ export default function SettingsScreen(): JSX.Element {
 
   function patchProxy<K extends keyof ProxySettings>(key: K, value: ProxySettings[K]): void {
     setSettings((prev) => (prev ? { ...prev, proxy: { ...prev.proxy, [key]: value } } : prev))
+  }
+
+  function updateTheme(patch: Partial<ThemeSettings>): void {
+    if (!settings) return
+    const theme = { ...settings.theme, ...patch }
+    applyTheme(theme)
+    setSettings({ ...settings, theme })
+    void api.setSettings({ theme } as unknown as Record<string, unknown>)
   }
 
   async function save(): Promise<void> {
@@ -219,6 +234,62 @@ export default function SettingsScreen(): JSX.Element {
       </SectionTitle>
 
       <div className="card">
+        <h3>Оформление</h3>
+        <p className="muted">Градиентный фон приложения. Выбор применяется сразу и сохраняется автоматически.</p>
+        <div className="theme-options">
+          {PRESETS.map((p) => {
+            const active = settings.theme.preset === p.id
+            const bg = p.id === 'custom'
+              ? gradientCss(settings.theme)
+              : `linear-gradient(135deg, ${p.start} 0%, ${p.end} 100%)`
+            return (
+              <button
+                key={p.id}
+                className={`theme-option ${active ? 'active' : ''}`}
+                onClick={() => updateTheme({ preset: p.id })}
+                title={p.label}
+              >
+                <span className="theme-swatch" style={{ background: bg }} />
+                <span className="theme-label">{p.label}</span>
+              </button>
+            )
+          })}
+        </div>
+        {settings.theme.preset === 'custom' && (
+          <div className="theme-custom">
+            <div className="grid-2">
+              <Field label="Начальный цвет">
+                <input
+                  type="color"
+                  className="color-input"
+                  value={settings.theme.customStart}
+                  onChange={(e) => updateTheme({ customStart: e.target.value })}
+                />
+              </Field>
+              <Field label="Конечный цвет">
+                <input
+                  type="color"
+                  className="color-input"
+                  value={settings.theme.customEnd}
+                  onChange={(e) => updateTheme({ customEnd: e.target.value })}
+                />
+              </Field>
+            </div>
+            <Field label={`Угол градиента: ${settings.theme.angle}°`}>
+              <input
+                type="range"
+                min={0}
+                max={360}
+                value={settings.theme.angle}
+                onChange={(e) => updateTheme({ angle: Number(e.target.value) })}
+              />
+            </Field>
+            <div className="theme-preview" style={{ background: gradientCss(settings.theme) }} />
+          </div>
+        )}
+      </div>
+
+      <div className="card">
         <h3>Аккаунты</h3>
         <div className="account-list">
           {accounts.length === 0 && <p className="muted">Нет аккаунтов. Добавьте Microsoft, ely.by или оффлайн.</p>}
@@ -329,18 +400,19 @@ export default function SettingsScreen(): JSX.Element {
 
       <div className="card">
         <h3>Пути и интеграции</h3>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={settings.showAllVersions}
-            onChange={(e) => patch('showAllVersions', e.target.checked)}
-          />
-          Показывать все версии Minecraft (от alpha до последней) при создании экземпляра
-        </label>
+        <Toggle
+          checked={settings.showAllVersions}
+          onChange={(v) => {
+            patch('showAllVersions', v)
+            void api.setSettings({ showAllVersions: v } as unknown as Record<string, unknown>)
+          }}
+          label="Показывать снапшоты и все версии Minecraft"
+          hint="При создании экземпляра будут доступны все версии: снапшоты, пре-релизы и старые (от alpha до последней)"
+        />
         <Field label="Папка игры (пусто = внутри лаунчера)">
           <TextInput value={settings.gameDir} onChange={(e) => patch('gameDir', e.target.value)} />
         </Field>
-        <Field label="Адрес сервера друзей (backend)" hint="Например https://aurora-friends.onrender.com">
+        <Field label="Адрес сервера друзей (backend)" hint="Например https://ваш-сервер.onrender.com">
           <TextInput value={settings.backendUrl} onChange={(e) => patch('backendUrl', e.target.value)} placeholder="https://…" />
         </Field>
         <Field label="Microsoft Client ID" hint="Пусто = встроенный публичный ID; можно указать свой (Azure App Registration)">

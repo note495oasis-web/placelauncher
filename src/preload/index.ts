@@ -98,6 +98,13 @@ export interface UpdateStatus {
   message?: string
 }
 
+export interface LogEntry {
+  ts: number
+  level: 'info' | 'warn' | 'error' | 'debug' | 'game'
+  source: string
+  message: string
+}
+
 const api = {
   platform: process.platform,
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
@@ -190,6 +197,7 @@ const api = {
   updateInstance: (name: string, patch: Partial<LauncherInstance>): Promise<LauncherInstance | null> =>
     ipcRenderer.invoke('instances:update', name, patch),
   deleteInstance: (name: string): Promise<LauncherInstance[]> => ipcRenderer.invoke('instances:delete', name),
+  openInstanceFolder: (name: string): Promise<string> => ipcRenderer.invoke('instance:openFolder', name),
 
   scanImportable: (): Promise<ImportableInstance[]> => ipcRenderer.invoke('import:scan'),
   importPrism: (info: ImportableInstance): Promise<LauncherInstance> => ipcRenderer.invoke('import:prism', info),
@@ -242,6 +250,9 @@ const api = {
   onFriendsConnection: (cb: (info: { connected: boolean }) => void): void => {
     ipcRenderer.on('friends:connection', (_event, info) => cb(info))
   },
+  onFriendsSessionExpired: (cb: () => void): void => {
+    ipcRenderer.on('friends:session-expired', () => cb())
+  },
   onHosting: (cb: (info: { session: string; port: number } | null) => void): void => {
     ipcRenderer.on('friends:hosting', (_event, info) => cb(info))
   },
@@ -249,7 +260,7 @@ const api = {
     ipcRenderer.on('friends:joined', (_event, info) => cb(info))
   },
   offFriendsEvents: (): void => {
-    for (const ch of ['friends:list', 'friends:presence', 'friends:world', 'friends:connection', 'friends:hosting', 'friends:joined']) {
+    for (const ch of ['friends:list', 'friends:presence', 'friends:world', 'friends:connection', 'friends:hosting', 'friends:joined', 'friends:session-expired']) {
       ipcRenderer.removeAllListeners(ch)
     }
   },
@@ -262,6 +273,20 @@ const api = {
   },
   offUpdateStatus: (): void => {
     ipcRenderer.removeAllListeners('update:status')
+  },
+
+  getLogs: (): Promise<LogEntry[]> => ipcRenderer.invoke('logs:get'),
+  clearLogs: (): Promise<boolean> => ipcRenderer.invoke('logs:clear'),
+  saveLogs: (): Promise<string | null> => ipcRenderer.invoke('logs:save'),
+  onLog: (cb: (entry: LogEntry) => void): (() => void) => {
+    const listener = (_event: unknown, entry: LogEntry): void => cb(entry)
+    ipcRenderer.on('logs:append', listener)
+    return () => ipcRenderer.removeListener('logs:append', listener)
+  },
+  onLogsCleared: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('logs:cleared', listener)
+    return () => ipcRenderer.removeListener('logs:cleared', listener)
   }
 }
 

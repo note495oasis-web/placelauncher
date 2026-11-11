@@ -24,7 +24,7 @@ export interface PreparedVersion {
   versionJson: VersionJson
 }
 
-const ASSET_BASE = 'https://resources.downloadminecraft.net'
+const ASSET_BASE = 'https://resources.download.minecraft.net'
 
 function hashFile(path: string): Promise<string> {
   return new Promise((resolve, reject) => {

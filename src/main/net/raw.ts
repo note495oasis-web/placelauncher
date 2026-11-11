@@ -48,7 +48,7 @@ export function requestWithAgent(
         ? https.request(u, { method: opts.method ?? 'GET', headers: opts.headers, agent: opts.agent as unknown as https.Agent }, onResponse)
         : http.request(u, { method: opts.method ?? 'GET', headers: opts.headers, agent: opts.agent }, onResponse)
 
-    req.on('error', reject)
+    req.on('error', (err) => reject(new Error(`${err.message} [${u.origin}${u.pathname}]`)))
     req.setTimeout(opts.timeout ?? 20000, () => req.destroy(new Error(`Request timeout: ${urlStr}`)))
     if (opts.body) req.write(opts.body)
     req.end()
@@ -97,7 +97,7 @@ export function downloadWithAgent(
         ? https.request(u, { method: 'GET', headers: opts.headers, agent: opts.agent as unknown as https.Agent }, onResponse)
         : http.request(u, { method: 'GET', headers: opts.headers, agent: opts.agent }, onResponse)
 
-    req.on('error', reject)
+    req.on('error', (err) => reject(new Error(`${err.message} [${u.origin}${u.pathname}]`)))
     req.setTimeout(opts.timeout ?? 60000, () => req.destroy(new Error(`Download timeout: ${urlStr}`)))
     req.end()
   })

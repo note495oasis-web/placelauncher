@@ -1,5 +1,5 @@
-appId: com.aurora.launcher
-productName: Aurora Launcher
+appId: com.placelauncher.launcher
+productName: PlaceLauncher
 directories:
   buildResources: build
   output: dist
@@ -18,10 +18,10 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
-  shortcutName: Aurora Launcher
+  shortcutName: PlaceLauncher
 nsisWeb:
   artifactName: ${name}-${version}-web-setup.${ext}
 publish:
   provider: github
   owner: note495oasis-web
-  repo: aurora-launcher
+  repo: placelauncher

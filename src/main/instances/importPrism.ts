@@ -1,12 +1,15 @@
 import { join } from 'path'
 import { existsSync, readdirSync, readFileSync, cpSync, mkdirSync } from 'fs'
 import { createInstance, instanceDir, type Instance, type InstanceLoader } from './manager'
+import { fetchCurseforgePackMods } from '../mods/packs'
 
 export interface PrismInstanceInfo {
   path: string
   name: string
   versionId: string
   loader?: InstanceLoader
+  flamePackId?: string
+  flameFileId?: string
 }
 
 interface MmcComponent {
@@ -70,6 +73,8 @@ export function scanPrismInstances(root: string): PrismInstanceInfo[] {
     let versionId = ''
     let loader: InstanceLoader | undefined
     let name = entry
+    let flamePackId: string | undefined
+    let flameFileId: string | undefined
     if (existsSync(packPath)) {
       try {
         const pack = JSON.parse(readFileSync(packPath, 'utf8')) as { components?: MmcComponent[] }
@@ -83,9 +88,13 @@ export function scanPrismInstances(root: string): PrismInstanceInfo[] {
     if (existsSync(cfgPath)) {
       const cfg = parseCfg(readFileSync(cfgPath, 'utf8'))
       if (cfg.name) name = cfg.name
+      if (cfg.ManagedPackType === 'flame' && cfg.ManagedPackID && cfg.ManagedPackVersionID) {
+        flamePackId = cfg.ManagedPackID
+        flameFileId = cfg.ManagedPackVersionID
+      }
     }
     if (!versionId) continue
-    out.push({ path, name, versionId, loader })
+    out.push({ path, name, versionId, loader, flamePackId, flameFileId })
   }
   return out
 }
@@ -113,7 +122,15 @@ function gameDataDir(prismInstancePath: string): string | null {
   return null
 }
 
-export function importPrismInstance(info: PrismInstanceInfo): Instance {
+function countJars(dir: string): number {
+  if (!existsSync(dir)) return 0
+  return readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.jar')).length
+}
+
+export async function importPrismInstance(
+  info: PrismInstanceInfo,
+  onProgress?: (done: number, total: number) => void
+): Promise<Instance> {
   const inst = createInstance({
     name: info.name,
     displayName: info.name,
@@ -121,9 +138,9 @@ export function importPrismInstance(info: PrismInstanceInfo): Instance {
     loader: info.loader,
     source: 'prism'
   })
+  const dest = instanceDir(inst.name)
   const src = gameDataDir(info.path)
   if (src) {
-    const dest = instanceDir(inst.name)
     mkdirSync(dest, { recursive: true })
     const skip = new Set(['logs', 'crash-reports', 'webcache', 'Cache', 'GPUCache'])
     for (const entry of readdirSync(src)) {
@@ -133,6 +150,15 @@ export function importPrismInstance(info: PrismInstanceInfo): Instance {
       } catch {
         // skip files that fail to copy (locked, etc.)
       }
+    }
+  }
+  // CurseForge managed packs (flame) may keep mods out of the instance folder — Prism
+  // downloads them lazily from the manifest. If nothing was copied, fetch them from CurseForge.
+  if (info.flamePackId && info.flameFileId && countJars(join(dest, 'mods')) === 0) {
+    try {
+      await fetchCurseforgePackMods(info.flamePackId, info.flameFileId, inst.name, onProgress)
+    } catch {
+      // best-effort: instance is still imported with configs/saves
     }
   }
   return inst
