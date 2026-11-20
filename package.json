@@ -1,6 +1,6 @@
 {
   "name": "placelauncher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Minecraft launcher with mod browsing, friends, modpack sharing and proxy support",
   "main": "./out/main/index.js",
   "author": "you",

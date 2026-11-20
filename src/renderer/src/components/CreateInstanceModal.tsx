@@ -10,6 +10,17 @@ interface SelectedMod {
   source: 'modrinth' | 'curseforge'
 }
 
+const APRIL_FOOLS = new Set([
+  '15w14a',
+  '1.RV-Pre1',
+  '20w14infinite',
+  '22w13oneblockatatime',
+  '23w13a_or_b',
+  '24w14potato',
+  '25w14craftmine',
+  '26w14a'
+])
+
 export default function CreateInstanceModal({
   open,
   onClose,
@@ -22,6 +33,7 @@ export default function CreateInstanceModal({
   const toast = useToast()
   const [versions, setVersions] = useState<{ id: string; type: string }[]>([])
   const [showAll, setShowAll] = useState(false)
+  const [aprilOnly, setAprilOnly] = useState(false)
   const [name, setName] = useState('')
   const [version, setVersion] = useState('')
   const [loader, setLoader] = useState('none')
@@ -34,16 +46,24 @@ export default function CreateInstanceModal({
     if (!open) return
     setSelected([])
     setProgress(null)
-    api.getSettings().then((s) => setShowAll(Boolean((s as Record<string, unknown>).showAllVersions)))
-    api.listVersions()
-      .then((r) => {
+    Promise.all([api.getSettings(), api.listVersions()])
+      .then(([s, r]) => {
+        const cfg = s as Record<string, unknown>
+        const april = Boolean(cfg.aprilFoolsOnly)
+        setShowAll(Boolean(cfg.showAllVersions))
+        setAprilOnly(april)
         setVersions(r.versions)
-        setVersion(r.latest.release)
+        const firstApril = r.versions.find((v) => APRIL_FOOLS.has(v.id))
+        setVersion(april && firstApril ? firstApril.id : r.latest.release)
       })
       .catch((e) => toast(errText(e), 'error'))
   }, [open])
 
-  const visibleVersions = showAll ? versions : versions.filter((v) => v.type === 'release')
+  const visibleVersions = aprilOnly
+    ? versions.filter((v) => APRIL_FOOLS.has(v.id))
+    : showAll
+      ? versions
+      : versions.filter((v) => v.type === 'release')
   const withMods = loader !== 'none'
 
   function addMod(project: ModProject, file: ModFile, source: 'modrinth' | 'curseforge'): void {

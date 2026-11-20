@@ -19,6 +19,8 @@ if (!existsSync(dataDir) && existsSync(legacyDataDir)) {
   }
 }
 app.setPath('userData', existsSync(dataDir) ? dataDir : existsSync(legacyDataDir) ? legacyDataDir : dataDir)
+app.setName('PlaceLauncher')
+app.setAppUserModelId('com.placelauncher.launcher')
 initLogger()
 
 function createWindow(): void {
@@ -30,7 +32,8 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#0f1115',
+    title: 'PlaceLauncher',
+    backgroundColor: '#07130c',
     icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

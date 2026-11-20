@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errText } from '../lib'
 import { useToast } from './toast'
 import { Button, SectionTitle, Select } from './ui'
+import { IconLink } from './Icons'
 
 type Filter = 'all' | 'info' | 'game' | 'warn' | 'error' | 'debug'
 
@@ -20,6 +21,7 @@ export default function LogsScreen(): JSX.Element {
   const [entries, setEntries] = useState<LogEntry[]>([])
   const [filter, setFilter] = useState<Filter>('all')
   const [autoScroll, setAutoScroll] = useState(true)
+  const [uploading, setUploading] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -71,6 +73,19 @@ export default function LogsScreen(): JSX.Element {
     }
   }
 
+  async function share(): Promise<void> {
+    setUploading(true)
+    try {
+      const url = await api.uploadLogs()
+      await api.copyText(url)
+      toast(`Ссылка скопирована: ${url}`, 'success')
+    } catch (e) {
+      toast(errText(e), 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className="screen logs-screen">
       <SectionTitle
@@ -78,6 +93,10 @@ export default function LogsScreen(): JSX.Element {
           <div className="btn-row logs-actions">
             <Button variant="ghost" onClick={copy}>Копировать</Button>
             <Button variant="ghost" onClick={save}>Сохранить в файл</Button>
+            <Button variant="ghost" onClick={share} disabled={uploading}>
+              <span className="btn-ic"><IconLink size={14} /></span>
+              {uploading ? 'Публикация…' : 'Ссылка на лог'}
+            </Button>
             <Button variant="danger" onClick={clear}>Очистить</Button>
           </div>
         }

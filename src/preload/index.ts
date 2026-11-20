@@ -19,9 +19,25 @@ export interface LauncherInstance {
   versionId: string
   loader?: InstanceLoaderInfo
   memoryMb?: number
+  width?: number
+  height?: number
+  javaArgs?: string
+  coverHue?: number
   createdAt: number
   lastPlayed?: number
   source?: string
+}
+
+export interface WorldEntry {
+  name: string
+  sizeMb: number
+  modified: number
+}
+
+export interface ScreenshotEntry {
+  name: string
+  thumb: string
+  ts: number
 }
 
 export interface ImportableInstance {
@@ -108,6 +124,7 @@ export interface LogEntry {
 const api = {
   platform: process.platform,
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+  uninstallLauncher: (): Promise<boolean> => ipcRenderer.invoke('app:uninstall'),
   copyText: (text: string): Promise<void> => ipcRenderer.invoke('clipboard:write', text),
   getSettings: (): Promise<Record<string, unknown>> => ipcRenderer.invoke('settings:get'),
   setSettings: (patch: Record<string, unknown>): Promise<Record<string, unknown>> =>
@@ -197,7 +214,14 @@ const api = {
   updateInstance: (name: string, patch: Partial<LauncherInstance>): Promise<LauncherInstance | null> =>
     ipcRenderer.invoke('instances:update', name, patch),
   deleteInstance: (name: string): Promise<LauncherInstance[]> => ipcRenderer.invoke('instances:delete', name),
+  duplicateInstance: (name: string): Promise<LauncherInstance[]> => ipcRenderer.invoke('instances:duplicate', name),
   openInstanceFolder: (name: string): Promise<string> => ipcRenderer.invoke('instance:openFolder', name),
+  listWorlds: (name: string): Promise<WorldEntry[]> => ipcRenderer.invoke('instance:worlds', name),
+  listScreenshots: (name: string): Promise<ScreenshotEntry[]> => ipcRenderer.invoke('instance:screenshots', name),
+  getCover: (name: string): Promise<string | null> => ipcRenderer.invoke('instance:cover:get', name),
+  setCover: (name: string, dataUrl: string | null): Promise<string | null> =>
+    ipcRenderer.invoke('instance:cover:set', name, dataUrl),
+  openInstanceFile: (name: string, rel: string): Promise<string> => ipcRenderer.invoke('instance:openFile', name, rel),
 
   scanImportable: (): Promise<ImportableInstance[]> => ipcRenderer.invoke('import:scan'),
   importPrism: (info: ImportableInstance): Promise<LauncherInstance> => ipcRenderer.invoke('import:prism', info),
@@ -278,6 +302,7 @@ const api = {
   getLogs: (): Promise<LogEntry[]> => ipcRenderer.invoke('logs:get'),
   clearLogs: (): Promise<boolean> => ipcRenderer.invoke('logs:clear'),
   saveLogs: (): Promise<string | null> => ipcRenderer.invoke('logs:save'),
+  uploadLogs: (): Promise<string> => ipcRenderer.invoke('logs:upload'),
   onLog: (cb: (entry: LogEntry) => void): (() => void) => {
     const listener = (_event: unknown, entry: LogEntry): void => cb(entry)
     ipcRenderer.on('logs:append', listener)

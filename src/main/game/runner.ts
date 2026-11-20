@@ -75,6 +75,9 @@ export async function launchInstance(
     instanceDir,
     javaPath: java.path,
     memoryMb: inst?.memoryMb ?? getSettings().memoryMb,
+    width: inst?.width,
+    height: inst?.height,
+    extraJvmArgs: inst?.javaArgs ? inst.javaArgs.split(/\s+/).filter(Boolean) : undefined,
     authlibInjector: injector
   })
   running = child

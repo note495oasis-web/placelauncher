@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, cpSync } from 'fs'
 import { gameDir } from '../game/paths'
 
 export interface InstanceLoader {
@@ -13,6 +13,10 @@ export interface Instance {
   versionId: string
   loader?: InstanceLoader
   memoryMb?: number
+  width?: number
+  height?: number
+  javaArgs?: string
+  coverHue?: number
   createdAt: number
   lastPlayed?: number
   source?: string
@@ -91,6 +95,24 @@ export function updateInstance(name: string, patch: Partial<Instance>): Instance
 
 export function deleteInstance(name: string): void {
   rmSync(instanceDir(name), { recursive: true, force: true, maxRetries: 5, retryDelay: 300 })
+}
+
+export function duplicateInstance(name: string): Instance | null {
+  const inst = getInstance(name)
+  if (!inst) return null
+  let copyName = `${name}-copy`
+  let n = 2
+  while (existsSync(instanceDir(copyName))) copyName = `${name}-copy-${n++}`
+  cpSync(instanceDir(name), instanceDir(copyName), { recursive: true })
+  const copy: Instance = {
+    ...inst,
+    name: copyName,
+    displayName: `${inst.displayName} (копия)`,
+    createdAt: Date.now(),
+    lastPlayed: undefined
+  }
+  writeFileSync(metaPath(copyName), JSON.stringify(copy, null, 2))
+  return copy
 }
 
 export function touchPlayed(name: string): void {

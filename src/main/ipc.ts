@@ -1,4 +1,7 @@
 import { app, BrowserWindow, ipcMain, clipboard, shell } from 'electron'
+import { basename, dirname, join } from 'path'
+import { readdirSync } from 'fs'
+import { spawn } from 'child_process'
 import { log, logLines, getLogs, clearLogs, saveLogs } from './logger'
 import { getSettings, setSettings, type Settings } from './store'
 import { testEndpoint, refreshPool, poolStatus, type ProxyEndpoint } from './net/proxy'
@@ -19,10 +22,12 @@ import {
   createInstance,
   updateInstance,
   deleteInstance,
+  duplicateInstance,
   instanceDir,
   type Instance,
   type InstanceLoader
 } from './instances/manager'
+import { listWorlds, listScreenshots, getCover, setCover, openInstanceFile } from './instances/extras'
 import { scanAllLaunchers, importPrismInstance, type PrismInstanceInfo } from './instances/importPrism'
 import {
   exportModpack,
@@ -44,9 +49,6 @@ import {
   startJoin,
   stopJoin,
   setStatus,
-  onGameLaunch,
-  onGameLog,
-  onGameStop,
   shareInstance,
   importShared
 } from './friends/service'
@@ -56,6 +58,25 @@ let msLoginAbort: AbortController | null = null
 export function registerIpc(): void {
   initFriendsEvents()
   ipcMain.handle('app:version', () => app.getVersion())
+  ipcMain.handle('app:uninstall', () => {
+    if (basename(process.execPath).toLowerCase() === 'electron.exe') {
+      throw new Error('Удаление доступно только в собранной версии лаунчера, не в отладочном запуске.')
+    }
+    const dir = dirname(process.execPath)
+    const uninstaller = readdirSync(dir).find((f) => /^uninstall.*\.exe$/i.test(f))
+    if (uninstaller) {
+      spawn(join(dir, uninstaller), [], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      // unpacked build: no NSIS uninstaller, remove the app folder after this process exits
+      spawn('cmd.exe', ['/c', `ping -n 3 127.0.0.1 >nul & rmdir /s /q "${dir}"`], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      }).unref()
+    }
+    setTimeout(() => app.quit(), 400)
+    return true
+  })
   ipcMain.handle('clipboard:write', (_event, text: string) => clipboard.writeText(text))
   ipcMain.handle('logs:get', () => getLogs())
   ipcMain.handle('logs:clear', () => {
@@ -63,6 +84,21 @@ export function registerIpc(): void {
     return true
   })
   ipcMain.handle('logs:save', () => saveLogs())
+  ipcMain.handle('logs:upload', async () => {
+    const text = getLogs()
+      .map((e) => `[${new Date(e.ts).toLocaleTimeString('ru-RU', { hour12: false })}] [${e.level}] [${e.source}] ${e.message}`)
+      .join('\n')
+    if (!text.trim()) throw new Error('Логи пустые')
+    const res = await fetch('https://api.mclo.gs/1/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ content: text }).toString()
+    })
+    const data = (await res.json()) as { success?: boolean; url?: string; error?: string }
+    if (!data.success || !data.url) throw new Error(data.error || 'Сервис логов не ответил')
+    log('info', 'launcher', `Логи опубликованы: ${data.url}`)
+    return data.url
+  })
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:set', (_event, patch: Partial<Settings>) => setSettings(patch))
 
@@ -121,14 +157,12 @@ export function registerIpc(): void {
   ipcMain.handle('game:launch', (_event, req: LaunchRequest) => {
     const win = BrowserWindow.getAllWindows()[0]
     log('info', 'launcher', `Запуск экземпляра «${req.instanceName}»${req.versionId ? ` (${req.versionId})` : ''}`)
-    onGameLaunch({ versionId: req.versionId, instanceName: req.instanceName })
     return launchInstance(
       req,
       (p) => win?.webContents.send('game:progress', p),
       (line) => {
         logLines('game', 'game', line)
         win?.webContents.send('game:log', line)
-        onGameLog(line, { versionId: req.versionId, instanceName: req.instanceName })
       }
     )
       .then((code) => {
@@ -143,7 +177,6 @@ export function registerIpc(): void {
   ipcMain.handle('game:stop', () => {
     log('info', 'launcher', 'Остановка игры')
     stopGame()
-    onGameStop()
     return true
   })
   ipcMain.handle('game:running', () => isRunning())
@@ -202,6 +235,20 @@ export function registerIpc(): void {
     return listInstances()
   })
   ipcMain.handle('instance:openFolder', (_event, name: string) => shell.openPath(instanceDir(name)))
+  ipcMain.handle('instances:duplicate', (_event, name: string) => {
+    const copy = duplicateInstance(name)
+    if (!copy) throw new Error('Экземпляр не найден')
+    log('info', 'launcher', `Создана копия экземпляра «${name}» → «${copy.name}»`)
+    return listInstances()
+  })
+  ipcMain.handle('instance:worlds', (_event, name: string) => listWorlds(name))
+  ipcMain.handle('instance:screenshots', (_event, name: string) => listScreenshots(name))
+  ipcMain.handle('instance:cover:get', (_event, name: string) => getCover(name))
+  ipcMain.handle('instance:cover:set', (_event, name: string, dataUrl: string | null) => {
+    setCover(name, dataUrl)
+    return getCover(name)
+  })
+  ipcMain.handle('instance:openFile', (_event, name: string, rel: string) => openInstanceFile(name, rel))
 
   ipcMain.handle('import:scan', () => scanAllLaunchers())
   ipcMain.handle('import:prism', async (_event, info: PrismInstanceInfo) => {

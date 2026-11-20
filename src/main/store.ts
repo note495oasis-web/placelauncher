@@ -11,13 +11,6 @@ export interface ProxySettings {
   password?: string
 }
 
-export interface ThemeSettings {
-  preset: 'standard' | 'purple' | 'custom'
-  customStart: string
-  customEnd: string
-  angle: number
-}
-
 export interface Settings {
   memoryMb: number
   javaPath: string
@@ -27,7 +20,8 @@ export interface Settings {
   microsoftClientId: string
   backendUrl: string
   showAllVersions: boolean
-  theme: ThemeSettings
+  aprilFoolsOnly: boolean
+  tutorialDone: boolean
 }
 
 const defaults: Settings = {
@@ -39,7 +33,8 @@ const defaults: Settings = {
   microsoftClientId: '',
   backendUrl: '',
   showAllVersions: false,
-  theme: { preset: 'standard', customStart: '#8a2be2', customEnd: '#000000', angle: 135 }
+  aprilFoolsOnly: false,
+  tutorialDone: false
 }
 
 let cachedPath = ''
@@ -56,18 +51,18 @@ function filePath(): string {
 export function getSettings(): Settings {
   try {
     if (existsSync(filePath())) {
-      const raw = JSON.parse(readFileSync(filePath(), 'utf8')) as Partial<Settings>
+      const raw = JSON.parse(readFileSync(filePath(), 'utf8')) as Partial<Settings> & { theme?: unknown }
+      delete raw.theme
       return {
         ...defaults,
         ...raw,
-        proxy: { ...defaults.proxy, ...(raw.proxy ?? {}) },
-        theme: { ...defaults.theme, ...(raw.theme ?? {}) }
+        proxy: { ...defaults.proxy, ...(raw.proxy ?? {}) }
       }
     }
   } catch {
     // fall through to defaults on corrupt file
   }
-  return { ...defaults, proxy: { ...defaults.proxy }, theme: { ...defaults.theme } }
+  return { ...defaults, proxy: { ...defaults.proxy } }
 }
 
 export function setSettings(patch: Partial<Settings>): Settings {
@@ -75,8 +70,7 @@ export function setSettings(patch: Partial<Settings>): Settings {
   const next: Settings = {
     ...current,
     ...patch,
-    proxy: patch.proxy ? { ...current.proxy, ...patch.proxy } : current.proxy,
-    theme: patch.theme ? { ...current.theme, ...patch.theme } : current.theme
+    proxy: patch.proxy ? { ...current.proxy, ...patch.proxy } : current.proxy
   }
   writeFileSync(filePath(), JSON.stringify(next, null, 2))
   return next

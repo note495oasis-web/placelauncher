@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib'
 import { useToast } from './toast'
+import { IconRefresh } from './Icons'
 
 export default function UpdateButton({ compact }: { compact: boolean }): JSX.Element {
   const toast = useToast()
@@ -43,7 +44,7 @@ export default function UpdateButton({ compact }: { compact: boolean }): JSX.Ele
       disabled={busy}
       title={label()}
     >
-      <span className="nav-icon">⟳</span>
+      <span className="nav-icon"><IconRefresh size={15} /></span>
       {!compact && <span className="nav-label">{label()}</span>}
     </button>
   )

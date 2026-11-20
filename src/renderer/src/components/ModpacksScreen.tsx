@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errText, formatBytes, formatDownloads } from '../lib'
 import { useToast } from './toast'
 import { Button, TextInput, Select, SectionTitle, Modal, Spinner, EmptyState } from './ui'
+import { IconCube, IconDownload } from './Icons'
 
 export default function ModpacksScreen(): JSX.Element {
   const toast = useToast()
@@ -138,10 +139,10 @@ export default function ModpacksScreen(): JSX.Element {
         <div className="mod-grid" onScroll={onGridScroll}>
           {results.map((p) => (
             <div key={p.id} className="mod-card" onClick={() => openProject(p)}>
-              {p.iconUrl ? <img className="mod-icon" src={p.iconUrl} alt="" /> : <div className="mod-icon mod-icon-fallback">▣</div>}
+              {p.iconUrl ? <img className="mod-icon" src={p.iconUrl} alt="" /> : <div className="mod-icon mod-icon-fallback"><IconCube size={22} /></div>}
               <div className="mod-body">
                 <strong>{p.title}</strong>
-                <span className="muted small">{p.author} · {formatDownloads(p.downloads)}</span>
+                <span className="muted small mod-stats">{p.author} · <span className="dl"><IconDownload size={12} />{formatDownloads(p.downloads)}</span></span>
                 <p className="mod-desc">{p.description}</p>
               </div>
             </div>

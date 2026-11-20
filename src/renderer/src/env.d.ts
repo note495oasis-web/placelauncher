@@ -49,9 +49,25 @@ interface LauncherInstance {
   versionId: string
   loader?: InstanceLoader
   memoryMb?: number
+  width?: number
+  height?: number
+  javaArgs?: string
+  coverHue?: number
   createdAt: number
   lastPlayed?: number
   source?: string
+}
+
+interface WorldEntry {
+  name: string
+  sizeMb: number
+  modified: number
+}
+
+interface ScreenshotEntry {
+  name: string
+  thumb: string
+  ts: number
 }
 
 interface ImportableInstance {
@@ -141,6 +157,7 @@ interface Window {
   launcher: {
     platform: string
     getAppVersion(): Promise<string>
+    uninstallLauncher(): Promise<boolean>
     copyText(text: string): Promise<void>
     getSettings(): Promise<Record<string, unknown>>
     setSettings(patch: Record<string, unknown>): Promise<Record<string, unknown>>
@@ -198,7 +215,13 @@ interface Window {
     }): Promise<LauncherInstance>
     updateInstance(name: string, patch: Partial<LauncherInstance>): Promise<LauncherInstance | null>
     deleteInstance(name: string): Promise<LauncherInstance[]>
+    duplicateInstance(name: string): Promise<LauncherInstance[]>
     openInstanceFolder(name: string): Promise<string>
+    listWorlds(name: string): Promise<WorldEntry[]>
+    listScreenshots(name: string): Promise<ScreenshotEntry[]>
+    getCover(name: string): Promise<string | null>
+    setCover(name: string, dataUrl: string | null): Promise<string | null>
+    openInstanceFile(name: string, rel: string): Promise<string>
     scanImportable(): Promise<ImportableInstance[]>
     importPrism(info: ImportableInstance): Promise<LauncherInstance>
     listTrackedMods(name: string): Promise<TrackedMod[]>
@@ -242,6 +265,7 @@ interface Window {
     getLogs(): Promise<LogEntry[]>
     clearLogs(): Promise<boolean>
     saveLogs(): Promise<string | null>
+    uploadLogs(): Promise<string>
     onLog(cb: (entry: LogEntry) => void): () => void
     onLogsCleared(cb: () => void): () => void
   }

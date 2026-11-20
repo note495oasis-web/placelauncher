@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, errText } from '../lib'
 import { useToast } from './toast'
 import { Button, Field, TextInput, Select, SectionTitle, Badge, Modal, Progress, Spinner, Toggle } from './ui'
-import { applyTheme, gradientCss, PRESETS, DEFAULT_THEME, type ThemeSettings } from '../theme'
+import { IconUsers, IconGlobe, IconCpu, IconFolder, IconTrash } from './Icons'
 
 export interface ProxySettings {
   mode: 'off' | 'manual' | 'auto'
@@ -22,12 +22,13 @@ export interface Settings {
   microsoftClientId: string
   backendUrl: string
   showAllVersions: boolean
-  theme: ThemeSettings
+  aprilFoolsOnly: boolean
+  tutorialDone: boolean
 }
 
 type Account = LauncherAccount
 
-export default function SettingsScreen(): JSX.Element {
+export default function SettingsScreen({ onStartTour }: { onStartTour?: () => void }): JSX.Element {
   const toast = useToast()
   const [settings, setSettings] = useState<Settings | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -48,13 +49,12 @@ export default function SettingsScreen(): JSX.Element {
   const [javaInfo, setJavaInfo] = useState<{ path: string; major: number } | null>(null)
   const [javaMajor, setJavaMajor] = useState(21)
   const [javaProgress, setJavaProgress] = useState<{ received: number; total: number } | null>(null)
+  const [uninstallOpen, setUninstallOpen] = useState(false)
+  const [uninstalling, setUninstalling] = useState(false)
 
   useEffect(() => {
     api.getSettings().then((s) => {
-      const parsed = s as unknown as Settings
-      parsed.theme = parsed.theme ?? DEFAULT_THEME
-      setSettings(parsed)
-      applyTheme(parsed.theme)
+      setSettings(s as unknown as Settings)
     }).catch((e) => toast(errText(e), 'error'))
     refreshAccounts()
     api.onJavaProgress((p) => setJavaProgress(p))
@@ -82,12 +82,9 @@ export default function SettingsScreen(): JSX.Element {
     setSettings((prev) => (prev ? { ...prev, proxy: { ...prev.proxy, [key]: value } } : prev))
   }
 
-  function updateTheme(patch: Partial<ThemeSettings>): void {
-    if (!settings) return
-    const theme = { ...settings.theme, ...patch }
-    applyTheme(theme)
-    setSettings({ ...settings, theme })
-    void api.setSettings({ theme } as unknown as Record<string, unknown>)
+  function setVersionFlags(all: boolean, april: boolean): void {
+    setSettings((prev) => (prev ? { ...prev, showAllVersions: all, aprilFoolsOnly: april } : prev))
+    void api.setSettings({ showAllVersions: all, aprilFoolsOnly: april } as unknown as Record<string, unknown>)
   }
 
   async function save(): Promise<void> {
@@ -225,72 +222,32 @@ export default function SettingsScreen(): JSX.Element {
     }
   }
 
+  async function uninstall(): Promise<void> {
+    setUninstalling(true)
+    try {
+      await api.uninstallLauncher()
+    } catch (e) {
+      toast(errText(e), 'error')
+      setUninstalling(false)
+      setUninstallOpen(false)
+    }
+  }
+
   if (!settings) return <Spinner label="Загрузка настроек…" />
 
   return (
     <div className="screen settings-screen">
-      <SectionTitle action={<Button onClick={save} disabled={saving}>{saving ? 'Сохранение…' : 'Сохранить'}</Button>}>
+      <SectionTitle action={
+        <div className="grid-head-right">
+          {onStartTour && <Button variant="subtle" onClick={onStartTour}>Пройти обучение заново</Button>}
+          <Button onClick={save} disabled={saving}>{saving ? 'Сохранение…' : 'Сохранить'}</Button>
+        </div>
+      }>
         Настройки
       </SectionTitle>
 
       <div className="card">
-        <h3>Оформление</h3>
-        <p className="muted">Градиентный фон приложения. Выбор применяется сразу и сохраняется автоматически.</p>
-        <div className="theme-options">
-          {PRESETS.map((p) => {
-            const active = settings.theme.preset === p.id
-            const bg = p.id === 'custom'
-              ? gradientCss(settings.theme)
-              : `linear-gradient(135deg, ${p.start} 0%, ${p.end} 100%)`
-            return (
-              <button
-                key={p.id}
-                className={`theme-option ${active ? 'active' : ''}`}
-                onClick={() => updateTheme({ preset: p.id })}
-                title={p.label}
-              >
-                <span className="theme-swatch" style={{ background: bg }} />
-                <span className="theme-label">{p.label}</span>
-              </button>
-            )
-          })}
-        </div>
-        {settings.theme.preset === 'custom' && (
-          <div className="theme-custom">
-            <div className="grid-2">
-              <Field label="Начальный цвет">
-                <input
-                  type="color"
-                  className="color-input"
-                  value={settings.theme.customStart}
-                  onChange={(e) => updateTheme({ customStart: e.target.value })}
-                />
-              </Field>
-              <Field label="Конечный цвет">
-                <input
-                  type="color"
-                  className="color-input"
-                  value={settings.theme.customEnd}
-                  onChange={(e) => updateTheme({ customEnd: e.target.value })}
-                />
-              </Field>
-            </div>
-            <Field label={`Угол градиента: ${settings.theme.angle}°`}>
-              <input
-                type="range"
-                min={0}
-                max={360}
-                value={settings.theme.angle}
-                onChange={(e) => updateTheme({ angle: Number(e.target.value) })}
-              />
-            </Field>
-            <div className="theme-preview" style={{ background: gradientCss(settings.theme) }} />
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h3>Аккаунты</h3>
+        <h3><IconUsers size={16} />Аккаунты</h3>
         <div className="account-list">
           {accounts.length === 0 && <p className="muted">Нет аккаунтов. Добавьте Microsoft, ely.by или оффлайн.</p>}
           {accounts.map((a) => (
@@ -325,7 +282,7 @@ export default function SettingsScreen(): JSX.Element {
       </div>
 
       <div className="card">
-        <h3>Прокси</h3>
+        <h3><IconGlobe size={16} />Прокси</h3>
         <p className="muted">Нужен для доступа к Modrinth и CurseForge без VPN. Авто-режим сам подбирает рабочие прокси.</p>
         <div className="grid-2">
           <Field label="Режим">
@@ -371,7 +328,7 @@ export default function SettingsScreen(): JSX.Element {
       </div>
 
       <div className="card">
-        <h3>Java и производительность</h3>
+        <h3><IconCpu size={16} />Java и производительность</h3>
         <p className="muted">Java скачивается и устанавливается автоматически при запуске игры — вручную ставить ничего не нужно. Кнопки ниже — для ручного выбора.</p>
         <div className="grid-2">
           <Field label="Память (МБ)">
@@ -399,21 +356,21 @@ export default function SettingsScreen(): JSX.Element {
       </div>
 
       <div className="card">
-        <h3>Пути и интеграции</h3>
+        <h3><IconFolder size={16} />Пути и интеграции</h3>
         <Toggle
           checked={settings.showAllVersions}
-          onChange={(v) => {
-            patch('showAllVersions', v)
-            void api.setSettings({ showAllVersions: v } as unknown as Record<string, unknown>)
-          }}
+          onChange={(v) => setVersionFlags(v, v ? false : settings.aprilFoolsOnly)}
           label="Показывать снапшоты и все версии Minecraft"
           hint="При создании экземпляра будут доступны все версии: снапшоты, пре-релизы и старые (от alpha до последней)"
         />
+        <Toggle
+          checked={settings.aprilFoolsOnly}
+          onChange={(v) => setVersionFlags(v ? false : settings.showAllVersions, v)}
+          label="Показывать только первоапрельские снапшоты"
+          hint="В списке версий останутся только шуточные версии Mojang: 15w14a, 20w14infinite, 24w14potato, 26w14a и другие. Обычные снапшоты и релизы скрыты"
+        />
         <Field label="Папка игры (пусто = внутри лаунчера)">
           <TextInput value={settings.gameDir} onChange={(e) => patch('gameDir', e.target.value)} />
-        </Field>
-        <Field label="Адрес сервера друзей (backend)" hint="Например https://ваш-сервер.onrender.com">
-          <TextInput value={settings.backendUrl} onChange={(e) => patch('backendUrl', e.target.value)} placeholder="https://…" />
         </Field>
         <Field label="Microsoft Client ID" hint="Пусто = встроенный публичный ID; можно указать свой (Azure App Registration)">
           <TextInput value={settings.microsoftClientId} onChange={(e) => patch('microsoftClientId', e.target.value)} />
@@ -421,6 +378,17 @@ export default function SettingsScreen(): JSX.Element {
         <Field label="CurseForge API Key" hint="Нужен для поиска модов в CurseForge">
           <TextInput type="password" value={settings.curseforgeApiKey} onChange={(e) => patch('curseforgeApiKey', e.target.value)} />
         </Field>
+      </div>
+
+      <div className="card">
+        <h3><IconTrash size={16} />Удаление лаунчера</h3>
+        <p className="muted">
+          Лаунчер закроется и удалится с компьютера. Твои сборки, миры, скриншоты и аккаунты
+          останутся в папке данных — их можно будет использовать снова.
+        </p>
+        <div className="btn-row">
+          <Button variant="danger" onClick={() => setUninstallOpen(true)}>Удалить лаунчер</Button>
+        </div>
       </div>
 
       <Modal open={!!msPrompt} title="Вход Microsoft" onClose={cancelMicrosoft} locked confirmClose>
@@ -452,6 +420,26 @@ export default function SettingsScreen(): JSX.Element {
         <div className="btn-row">
           <Button onClick={loginEly} disabled={busy === 'ely'}>{busy === 'ely' ? 'Вход…' : 'Войти'}</Button>
           <Button variant="ghost" onClick={() => setElyModal(false)}>Отмена</Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={uninstallOpen}
+        title="Удалить лаунчер?"
+        onClose={() => !uninstalling && setUninstallOpen(false)}
+        locked={uninstalling}
+      >
+        <p>
+          PlaceLauncher закроется и удалится с компьютера. Это действие нельзя отменить.
+        </p>
+        <p className="muted">
+          Сборки, миры, скриншоты и аккаунты в папке данных останутся — они не удаляются.
+        </p>
+        <div className="btn-row">
+          <Button variant="danger" onClick={uninstall} disabled={uninstalling}>
+            {uninstalling ? 'Удаление…' : 'Удалить навсегда'}
+          </Button>
+          <Button variant="ghost" onClick={() => setUninstallOpen(false)} disabled={uninstalling}>Отмена</Button>
         </div>
       </Modal>
     </div>
