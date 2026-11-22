@@ -4,6 +4,7 @@ import { useToast } from './toast'
 import { Button, SectionTitle, Badge, Modal, Progress, Spinner, EmptyState } from './ui'
 import { IconPlay, IconStop, IconPlus, IconDownload, IconEdit, IconFolder, IconTrash, IconCube, IconCopy, IconSearch } from './Icons'
 import InstanceEditorModal from './InstanceEditorModal'
+import CrashFixModal from './CrashFixModal'
 
 function coverStyle(inst: LauncherInstance, image?: string): CSSProperties {
   if (image) return { backgroundImage: `url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center' }
@@ -41,6 +42,7 @@ export default function PlayScreen({
   const [editing, setEditing] = useState<LauncherInstance | null>(null)
   const [covers, setCovers] = useState<Record<string, string>>({})
   const [query, setQuery] = useState('')
+  const [crash, setCrash] = useState<{ inst: LauncherInstance; analysis: CrashAnalysis } | null>(null)
 
   const selected = instances.find((i) => i.name === selectedName) ?? instances[0] ?? null
   const filtered = query.trim()
@@ -106,11 +108,20 @@ export default function PlayScreen({
   async function launch(inst: LauncherInstance): Promise<void> {
     setLaunching(inst.name)
     setLogs([])
+    setCrash(null)
     setProgress({ phase: 'Подготовка', done: 0, total: 1 })
     try {
-      await api.launchGame({ instanceName: inst.name, versionId: inst.versionId })
-      setRunning(true)
-      toast(`Запущено: ${inst.displayName}`, 'success')
+      const code = await api.launchGame({ instanceName: inst.name, versionId: inst.versionId })
+      if (code !== 0) {
+        try {
+          const analysis = await api.analyzeCrash(inst.name)
+          setCrash({ inst, analysis })
+        } catch {
+          toast('Игра завершилась с ошибкой — смотри логи.', 'error')
+        }
+      } else {
+        toast(`Запущено: ${inst.displayName}`, 'success')
+      }
       await refresh()
     } catch (e) {
       toast(errText(e), 'error')
@@ -300,6 +311,15 @@ export default function PlayScreen({
       </Modal>
 
       <InstanceEditorModal instance={editing} onClose={() => setEditing(null)} onChanged={refresh} />
+
+      {crash && (
+        <CrashFixModal
+          instance={crash.inst}
+          analysis={crash.analysis}
+          onClose={() => setCrash(null)}
+          onRelaunch={() => void launch(crash.inst)}
+        />
+      )}
     </div>
   )
 }

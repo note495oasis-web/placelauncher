@@ -15,10 +15,22 @@ import { getInstance, touchPlayed } from '../instances/manager'
 export { gameDir } from './paths'
 
 let running: ChildProcess | null = null
+let manualStop = false
+let launchStartedAt = 0
+const logTail: string[] = []
+const LOG_TAIL_MAX = 400
 
 export interface LaunchRequest {
   versionId?: string
   instanceName: string
+}
+
+export function getLastGameLog(): string[] {
+  return logTail
+}
+
+export function getLaunchStartedAt(): number {
+  return launchStartedAt
 }
 
 export async function launchInstance(
@@ -29,6 +41,9 @@ export async function launchInstance(
   if (running) throw new Error('Игра уже запущена')
   const account = getActive()
   if (!account) throw new Error('Сначала выберите аккаунт в настройках')
+  manualStop = false
+  launchStartedAt = Date.now()
+  logTail.length = 0
 
   const gd = gameDir()
   const inst = getInstance(req.instanceName)
@@ -58,7 +73,8 @@ export async function launchInstance(
   const prepared = await prepareVersion(gd, version, onProgress)
 
   onProgress({ phase: 'Java', done: 0, total: 1 })
-  const java = await ensureJava(prepared.javaMajor, gd, (received, total) =>
+  const javaMajor = inst?.javaMajor ?? prepared.javaMajor
+  const java = await ensureJava(javaMajor, gd, (received, total) =>
     onProgress({ phase: 'Java (загрузка)', done: received, total: total || 1 })
   )
   onProgress({ phase: 'Java', done: 1, total: 1 })
@@ -82,8 +98,17 @@ export async function launchInstance(
   })
   running = child
   touchPlayed(req.instanceName)
-  child.stdout?.on('data', (d: Buffer) => onLog(d.toString()))
-  child.stderr?.on('data', (d: Buffer) => onLog(d.toString()))
+  const feed = (chunk: string): void => {
+    for (const line of chunk.split(/\r?\n/)) {
+      if (line.trim()) {
+        logTail.push(line)
+        if (logTail.length > LOG_TAIL_MAX) logTail.splice(0, logTail.length - LOG_TAIL_MAX)
+      }
+    }
+    onLog(chunk)
+  }
+  child.stdout?.on('data', (d: Buffer) => feed(d.toString()))
+  child.stderr?.on('data', (d: Buffer) => feed(d.toString()))
 
   return new Promise((resolve, reject) => {
     child.on('error', (err) => {
@@ -92,12 +117,13 @@ export async function launchInstance(
     })
     child.on('exit', (code) => {
       running = null
-      resolve(code ?? 0)
+      resolve(manualStop ? 0 : (code ?? 0))
     })
   })
 }
 
 export function stopGame(): void {
+  manualStop = true
   running?.kill()
   running = null
 }

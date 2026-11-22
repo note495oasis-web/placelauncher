@@ -12,12 +12,13 @@ const contentTabs = [
 ] as const
 
 type ContentTab = (typeof contentTabs)[number]['id']
-type TabId = ContentTab | 'worlds' | 'screenshots' | 'settings'
+type TabId = ContentTab | 'worlds' | 'screenshots' | 'backups' | 'settings'
 
 const allTabs: { id: TabId; label: string }[] = [
   ...contentTabs.map((t) => ({ id: t.id as TabId, label: t.label })),
   { id: 'worlds', label: 'Миры' },
   { id: 'screenshots', label: 'Скриншоты' },
+  { id: 'backups', label: 'Бэкапы' },
   { id: 'settings', label: 'Настройки' }
 ]
 
@@ -45,6 +46,8 @@ export default function InstanceEditorModal({
   const [installed, setInstalled] = useState<string[]>([])
   const [worlds, setWorlds] = useState<WorldEntry[]>([])
   const [shots, setShots] = useState<ScreenshotEntry[]>([])
+  const [backups, setBackups] = useState<BackupEntry[]>([])
+  const [backupBusy, setBackupBusy] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [memoryMb, setMemoryMb] = useState(4096)
@@ -90,6 +93,56 @@ export default function InstanceEditorModal({
     }
   }
 
+  async function loadBackups(): Promise<void> {
+    if (!instance) return
+    try {
+      setBackups(await api.listBackups(instance.name))
+    } catch (e) {
+      toast(errText(e), 'error')
+    }
+  }
+
+  async function makeBackup(): Promise<void> {
+    if (!instance) return
+    setBackupBusy(true)
+    try {
+      setBackups(await api.createBackup(instance.name, 'ручной бэкап'))
+      toast('Бэкап сделан.', 'success')
+    } catch (e) {
+      toast(errText(e), 'error')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function restoreB(b: BackupEntry): Promise<void> {
+    if (!instance) return
+    if (!window.confirm(`Вернуть сборку к бэкапу «${b.label}»? Текущие моды и конфиги заменятся (перед этим тоже сохранится бэкап).`)) return
+    setBackupBusy(true)
+    try {
+      setBackups(await api.restoreBackup(instance.name, b.id))
+      toast('Сборка возвращена к бэкапу.', 'success')
+      onChanged()
+    } catch (e) {
+      toast(errText(e), 'error')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function deleteB(b: BackupEntry): Promise<void> {
+    if (!instance) return
+    if (!window.confirm(`Удалить бэкап «${b.label}»?`)) return
+    setBackupBusy(true)
+    try {
+      setBackups(await api.deleteBackup(instance.name, b.id))
+    } catch (e) {
+      toast(errText(e), 'error')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
   async function loadSettings(): Promise<void> {
     if (!instance) return
     setMemoryMb(instance.memoryMb ?? 4096)
@@ -108,6 +161,7 @@ export default function InstanceEditorModal({
     setTab(id)
     if (id === 'worlds') void loadWorlds()
     else if (id === 'screenshots') void loadShots()
+    else if (id === 'backups') void loadBackups()
     else if (id === 'settings') void loadSettings()
     else void refresh(id)
   }
@@ -273,6 +327,40 @@ export default function InstanceEditorModal({
                       <img src={s.thumb} alt={s.name} />
                       <span className="shot-name">{s.name}</span>
                     </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'backups' && (
+            <>
+              <div className="picker-head">
+                <h3 className="grid-head-title">Бэкапы ({backups.length})</h3>
+                <Button variant="ghost" onClick={makeBackup} disabled={backupBusy}>Сделать сейчас</Button>
+              </div>
+              <p className="muted small">
+                Перед каждой установкой или удалением мода лаунчер сам сохраняет снапшот папок mods, config,
+                ресурспаков и шейдеров (держит 10 последних). Миры в бэкап не входят.
+              </p>
+              {backups.length === 0 ? (
+                <EmptyState
+                  title="Бэкапов пока нет"
+                  text="Они появятся сами перед установкой модов — или нажми «Сделать сейчас»."
+                />
+              ) : (
+                <div className="file-list">
+                  {backups.map((b) => (
+                    <div key={b.id} className="file-row">
+                      <div className="account-meta">
+                        <strong>{new Date(b.ts).toLocaleString('ru-RU')}</strong>
+                        <span className="muted small">{b.label}{b.auto ? ' · авто' : ''}</span>
+                      </div>
+                      <div className="btn-row">
+                        <Button variant="ghost" disabled={backupBusy} onClick={() => restoreB(b)}>Вернуть</Button>
+                        <Button variant="danger" disabled={backupBusy} onClick={() => deleteB(b)}>Удалить</Button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

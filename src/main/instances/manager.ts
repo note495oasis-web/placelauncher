@@ -13,6 +13,7 @@ export interface Instance {
   versionId: string
   loader?: InstanceLoader
   memoryMb?: number
+  javaMajor?: number
   width?: number
   height?: number
   javaArgs?: string

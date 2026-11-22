@@ -49,6 +49,7 @@ interface LauncherInstance {
   versionId: string
   loader?: InstanceLoader
   memoryMb?: number
+  javaMajor?: number
   width?: number
   height?: number
   javaArgs?: string
@@ -56,6 +57,30 @@ interface LauncherInstance {
   createdAt: number
   lastPlayed?: number
   source?: string
+}
+
+interface CrashFix {
+  kind: 'disable-mods' | 'install-mod' | 'set-memory' | 'set-java' | 'restore-backup'
+  label: string
+  files?: string[]
+  modId?: string
+  memoryMb?: number
+  javaMajor?: number
+  backupId?: string
+}
+
+interface CrashAnalysis {
+  summary: string
+  errorLine?: string
+  reportRel?: string
+  fixes: CrashFix[]
+}
+
+interface BackupEntry {
+  id: string
+  ts: number
+  label: string
+  auto: boolean
 }
 
 interface WorldEntry {
@@ -182,6 +207,8 @@ interface Window {
     launchGame(req: { versionId: string; instanceName: string }): Promise<number>
     stopGame(): Promise<boolean>
     isGameRunning(): Promise<boolean>
+    analyzeCrash(instanceName: string): Promise<CrashAnalysis>
+    applyCrashFix(instanceName: string, fix: CrashFix): Promise<string>
     findJava(): Promise<{ path: string; major: number } | null>
     downloadJava(major: number): Promise<{ path: string; major: number }>
     onJavaProgress(cb: (info: { received: number; total: number }) => void): void
@@ -222,6 +249,10 @@ interface Window {
     getCover(name: string): Promise<string | null>
     setCover(name: string, dataUrl: string | null): Promise<string | null>
     openInstanceFile(name: string, rel: string): Promise<string>
+    listBackups(name: string): Promise<BackupEntry[]>
+    createBackup(name: string, label?: string): Promise<BackupEntry[]>
+    restoreBackup(name: string, id: string): Promise<BackupEntry[]>
+    deleteBackup(name: string, id: string): Promise<BackupEntry[]>
     scanImportable(): Promise<ImportableInstance[]>
     importPrism(info: ImportableInstance): Promise<LauncherInstance>
     listTrackedMods(name: string): Promise<TrackedMod[]>

@@ -10,7 +10,9 @@ import { loginAuthlib, ELY_BY } from './auth/authlib'
 import { listAccounts, getActive, setActive, removeAccount, addOffline } from './auth/accounts'
 import { getAccountHead } from './auth/head'
 import { fetchManifest } from './game/versions'
-import { launchInstance, stopGame, isRunning, gameDir, type LaunchRequest } from './game/runner'
+import { launchInstance, stopGame, isRunning, gameDir, getLastGameLog, getLaunchStartedAt, type LaunchRequest } from './game/runner'
+import { analyzeCrash, applyFix, type CrashFix } from './crash/analyzer'
+import { createBackup, listBackups, restoreBackup, deleteBackup } from './instances/backups'
 import { findJava, downloadJava } from './game/java'
 import { searchModrinth, getModrinthVersions } from './mods/modrinth'
 import { searchCurseforge, getCurseforgeFiles } from './mods/curseforge'
@@ -180,6 +182,26 @@ export function registerIpc(): void {
     return true
   })
   ipcMain.handle('game:running', () => isRunning())
+  ipcMain.handle('crash:analyze', (_event, instanceName: string) =>
+    analyzeCrash(instanceName, getLastGameLog(), getLaunchStartedAt())
+  )
+  ipcMain.handle('crash:fix', (_event, instanceName: string, fix: CrashFix) => applyFix(instanceName, fix))
+
+  ipcMain.handle('instance:backups:list', (_event, name: string) => listBackups(name))
+  ipcMain.handle('instance:backups:create', (_event, name: string, label?: string) => {
+    const entry = createBackup(name, label ?? 'ручной бэкап')
+    log('info', 'backup', `Бэкап «${name}»: ${entry.label}`)
+    return listBackups(name)
+  })
+  ipcMain.handle('instance:backups:restore', (_event, name: string, id: string) => {
+    restoreBackup(name, id)
+    log('info', 'backup', `Восстановление «${name}» из бэкапа ${id}`)
+    return listBackups(name)
+  })
+  ipcMain.handle('instance:backups:delete', (_event, name: string, id: string) => {
+    deleteBackup(name, id)
+    return listBackups(name)
+  })
   ipcMain.handle('java:find', () => findJava())
   ipcMain.handle('java:download', (_event, major: number) => {
     const win = BrowserWindow.getAllWindows()[0]
@@ -196,14 +218,21 @@ export function registerIpc(): void {
   )
   ipcMain.handle(
     'mods:install',
-    (
+    async (
       _event,
       instanceName: string,
       source: TrackedFile['source'],
       projectId: string | undefined,
       file: { url: string; filename: string; size?: number },
       subdir: ContentDir
-    ) => installTrackedMod(instanceName, source, projectId, file, subdir)
+    ) => {
+      try {
+        createBackup(instanceName, `перед установкой ${file.filename}`, true)
+      } catch (err) {
+        log('warn', 'backup', err instanceof Error ? err.message : String(err))
+      }
+      return installTrackedMod(instanceName, source, projectId, file, subdir)
+    }
   )
   ipcMain.handle('modpacks:install', (_event, source: 'modrinth' | 'curseforge', url: string, title: string) => {
     const win = BrowserWindow.getAllWindows()[0]
@@ -216,6 +245,11 @@ export function registerIpc(): void {
     listContentFiles(instanceDir(instanceName), subdir)
   )
   ipcMain.handle('content:remove', (_event, instanceName: string, subdir: ContentDir, filename: string) => {
+    try {
+      createBackup(instanceName, `перед удалением ${filename}`, true)
+    } catch (err) {
+      log('warn', 'backup', err instanceof Error ? err.message : String(err))
+    }
     removeContentFile(instanceDir(instanceName), subdir, filename)
     unrecordInstall(instanceName, filename, subdir)
     return listContentFiles(instanceDir(instanceName), subdir)

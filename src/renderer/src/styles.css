@@ -862,3 +862,29 @@ body {
 .tour-walker.face-left .mascot-eyes, .tour-walker.face-right .mascot-eyes { transform: translateX(3.5px); }
 .tour-walker .mascot-eyes { transition: transform 0.25s; }
 .tour-walker.face-left .mascot-eyes, .tour-walker.face-right .mascot-eyes { transform: translateX(3.5px); }
+
+.crash-line {
+  font-family: monospace;
+  font-size: 12px;
+  color: #b8c0cc;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 8px 0 12px;
+}
+.fix-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.fix-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.fix-row .account-meta { display: flex; flex-direction: column; gap: 2px; }
+.fix-error { color: #ff9d9d; }

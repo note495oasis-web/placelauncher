@@ -19,6 +19,7 @@ export interface LauncherInstance {
   versionId: string
   loader?: InstanceLoaderInfo
   memoryMb?: number
+  javaMajor?: number
   width?: number
   height?: number
   javaArgs?: string
@@ -26,6 +27,30 @@ export interface LauncherInstance {
   createdAt: number
   lastPlayed?: number
   source?: string
+}
+
+export interface CrashFix {
+  kind: 'disable-mods' | 'install-mod' | 'set-memory' | 'set-java' | 'restore-backup'
+  label: string
+  files?: string[]
+  modId?: string
+  memoryMb?: number
+  javaMajor?: number
+  backupId?: string
+}
+
+export interface CrashAnalysis {
+  summary: string
+  errorLine?: string
+  reportRel?: string
+  fixes: CrashFix[]
+}
+
+export interface BackupEntry {
+  id: string
+  ts: number
+  label: string
+  auto: boolean
 }
 
 export interface WorldEntry {
@@ -161,6 +186,9 @@ const api = {
     ipcRenderer.invoke('game:launch', req),
   stopGame: (): Promise<boolean> => ipcRenderer.invoke('game:stop'),
   isGameRunning: (): Promise<boolean> => ipcRenderer.invoke('game:running'),
+  analyzeCrash: (instanceName: string): Promise<CrashAnalysis> => ipcRenderer.invoke('crash:analyze', instanceName),
+  applyCrashFix: (instanceName: string, fix: CrashFix): Promise<string> =>
+    ipcRenderer.invoke('crash:fix', instanceName, fix),
   findJava: (): Promise<{ path: string; major: number } | null> => ipcRenderer.invoke('java:find'),
   downloadJava: (major: number): Promise<{ path: string; major: number }> =>
     ipcRenderer.invoke('java:download', major),
@@ -222,6 +250,14 @@ const api = {
   setCover: (name: string, dataUrl: string | null): Promise<string | null> =>
     ipcRenderer.invoke('instance:cover:set', name, dataUrl),
   openInstanceFile: (name: string, rel: string): Promise<string> => ipcRenderer.invoke('instance:openFile', name, rel),
+
+  listBackups: (name: string): Promise<BackupEntry[]> => ipcRenderer.invoke('instance:backups:list', name),
+  createBackup: (name: string, label?: string): Promise<BackupEntry[]> =>
+    ipcRenderer.invoke('instance:backups:create', name, label),
+  restoreBackup: (name: string, id: string): Promise<BackupEntry[]> =>
+    ipcRenderer.invoke('instance:backups:restore', name, id),
+  deleteBackup: (name: string, id: string): Promise<BackupEntry[]> =>
+    ipcRenderer.invoke('instance:backups:delete', name, id),
 
   scanImportable: (): Promise<ImportableInstance[]> => ipcRenderer.invoke('import:scan'),
   importPrism: (info: ImportableInstance): Promise<LauncherInstance> => ipcRenderer.invoke('import:prism', info),
