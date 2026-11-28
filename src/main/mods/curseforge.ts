@@ -31,6 +31,7 @@ interface CfFile {
   downloadUrl: string | null
   fileLength: number
   gameVersions: string[]
+  fileDate: string
   releaseType: number
   dependencies?: { modId: number; relationType: number }[]
 }
@@ -76,7 +77,10 @@ export async function getCurseforgeFiles(modId: string, opts: ModSearchOptions =
   const res = await apiJson<{ data: CfFile[] }>(`${BASE}/mods/${modId}/files?${params.toString()}`, {
     headers: headers()
   })
-  return res.data.map((f) => ({
+  const files = opts.loader
+    ? res.data.filter((file) => file.gameVersions.some((v) => v.toLowerCase() === opts.loader?.toLowerCase()))
+    : res.data
+  return files.map((f) => ({
     id: String(f.id),
     name: f.displayName,
     filename: f.fileName,
@@ -84,6 +88,7 @@ export async function getCurseforgeFiles(modId: string, opts: ModSearchOptions =
     size: f.fileLength,
     version: f.gameVersions[0] ?? '',
     releaseType: String(f.releaseType),
+    publishedAt: f.fileDate,
     dependencies: (f.dependencies ?? []).map((d) => ({
       projectId: String(d.modId),
       relation: String(d.relationType)

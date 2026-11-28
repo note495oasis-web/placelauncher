@@ -20,6 +20,7 @@ interface ModrinthVersion {
   version_number: string
   game_versions: string[]
   version_type: string
+  date_published: string
   files: { url: string; filename: string; primary: boolean; size: number }[]
   dependencies: { project_id: string; dependency_type: string }[]
 }
@@ -69,6 +70,7 @@ export async function getModrinthVersions(projectId: string, opts: ModSearchOpti
         size: file.size,
         version: v.game_versions[0] ?? '',
         releaseType: v.version_type,
+        publishedAt: v.date_published,
         dependencies: (v.dependencies ?? []).map((d) => ({
           projectId: d.project_id,
           relation: d.dependency_type

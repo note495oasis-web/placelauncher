@@ -26,3 +26,17 @@ export function formatDownloads(n: number): string {
 }
 
 export const api = window.launcher
+
+export function latestModFile(files: ModFile[]): ModFile | undefined {
+  const available = files.filter((file) => file.url)
+  const releases = available.filter((file) => file.releaseType === 'release' || file.releaseType === '1')
+  const candidates = releases.length > 0 ? releases : available
+  return candidates.reduce<ModFile | undefined>((latest, file) => {
+    if (!latest) return file
+    const latestTime = Date.parse(latest.publishedAt ?? '')
+    const fileTime = Date.parse(file.publishedAt ?? '')
+    if (!Number.isFinite(fileTime)) return latest
+    if (!Number.isFinite(latestTime) || fileTime > latestTime) return file
+    return latest
+  }, undefined)
+}

@@ -23,6 +23,7 @@ export interface ModFile {
   size: number
   version: string
   releaseType?: string
+  publishedAt?: string
   dependencies?: ModFileDependency[]
 }
 

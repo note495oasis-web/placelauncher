@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { api, errText } from '../lib'
+import { api, errText, latestModFile } from '../lib'
 import { useToast } from './toast'
 import { Button, Field, TextInput, Select, Modal, Badge, Progress } from './ui'
 import ModPicker from './ModPicker'
 
 interface SelectedMod {
   project: ModProject
-  file: ModFile
   source: 'modrinth' | 'curseforge'
 }
 
@@ -40,7 +39,7 @@ export default function CreateInstanceModal({
   const [loaderVersion, setLoaderVersion] = useState('')
   const [selected, setSelected] = useState<SelectedMod[]>([])
   const [creating, setCreating] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -66,8 +65,12 @@ export default function CreateInstanceModal({
       : versions.filter((v) => v.type === 'release')
   const withMods = loader !== 'none'
 
-  function addMod(project: ModProject, file: ModFile, source: 'modrinth' | 'curseforge'): void {
-    setSelected((prev) => (prev.some((m) => m.file.id === file.id) ? prev : [...prev, { project, file, source }]))
+  function addMod(project: ModProject, _file: ModFile, source: 'modrinth' | 'curseforge'): void {
+    setSelected((prev) => (
+      prev.some((m) => m.source === source && m.project.id === project.id)
+        ? prev
+        : [...prev, { project, source }]
+    ))
     toast(`Добавлено: ${project.title}`, 'success')
   }
 
@@ -78,17 +81,29 @@ export default function CreateInstanceModal({
     }
     setCreating(true)
     try {
+      const installs: { mod: SelectedMod; file: ModFile }[] = []
+      if (withMods && selected.length) {
+        setProgress({ done: 0, total: selected.length, label: 'Подбор последних версий' })
+        for (let i = 0; i < selected.length; i++) {
+          const mod = selected[i]
+          const files = await api.getModVersions(mod.source, mod.project.id, { gameVersion: version, loader, projectType: 'mod' })
+          const file = latestModFile(files)
+          if (!file) throw new Error(`Нет совместимой версии: ${mod.project.title}`)
+          installs.push({ mod, file })
+          setProgress({ done: i + 1, total: selected.length, label: 'Подбор последних версий' })
+        }
+      }
       const inst = await api.createInstance({
         name: name.trim(),
         versionId: version,
         loader: withMods ? { type: loader as InstanceLoader['type'], version: loaderVersion.trim() } : undefined
       })
-      if (withMods && selected.length) {
-        setProgress({ done: 0, total: selected.length })
+      if (installs.length) {
+        setProgress({ done: 0, total: installs.length, label: 'Установка модов' })
         let done = 0
-        for (const m of selected) {
-          await api.installMod(inst.name, m.source, m.project.id, { url: m.file.url, filename: m.file.filename, size: m.file.size }, 'mods')
-          setProgress({ done: ++done, total: selected.length })
+        for (const { mod, file } of installs) {
+          await api.installMod(inst.name, mod.source, mod.project.id, { url: file.url, filename: file.filename, size: file.size }, 'mods')
+          setProgress({ done: ++done, total: installs.length, label: 'Установка модов' })
         }
       }
       toast(`Экземпляр «${inst.displayName}» создан.`, 'success')
@@ -146,24 +161,28 @@ export default function CreateInstanceModal({
           {selected.length > 0 && (
             <div className="selected-chips">
               {selected.map((m) => (
-                <span key={m.file.id} className="chip">
+                <span key={`${m.source}:${m.project.id}`} className="chip">
                   {m.project.title}
-                  <button onClick={() => setSelected((prev) => prev.filter((x) => x.file.id !== m.file.id))}>×</button>
+                  <button onClick={() => setSelected((prev) => prev.filter((x) => !(x.source === m.source && x.project.id === m.project.id)))}>×</button>
                 </span>
               ))}
             </div>
           )}
+          <p className="muted small">
+            Выберите моды: при создании автоматически установим последнюю совместимую версию.
+            Изменить версию можно позже в редакторе экземпляра.
+          </p>
           <ModPicker
             gameVersion={version}
             loader={loader}
             projectType="mod"
-            actionLabel="Добавить"
+            autoLatest
             onPick={addMod}
           />
         </div>
       )}
 
-      {progress && <Progress value={progress.done} max={progress.total} label="Установка модов" />}
+      {progress && <Progress value={progress.done} max={progress.total} label={progress.label} />}
       <div className="btn-row">
         <Button onClick={create} disabled={creating}>
           {creating ? 'Создание…' : withMods ? `Создать и установить (${selected.length})` : 'Создать экземпляр'}

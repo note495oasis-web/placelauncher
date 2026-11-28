@@ -36,6 +36,7 @@ interface ModFile {
   size: number
   version: string
   releaseType?: string
+  publishedAt?: string
 }
 
 interface InstanceLoader {

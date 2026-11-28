@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, errText, formatBytes, formatDownloads } from '../lib'
+import { api, errText, formatBytes, formatDownloads, latestModFile } from '../lib'
 import { useToast } from './toast'
 import { Button, TextInput, Select, Spinner, EmptyState } from './ui'
 
@@ -8,6 +8,7 @@ export interface ModPickerProps {
   loader?: string
   projectType: string
   actionLabel?: string
+  autoLatest?: boolean
   busyId?: string | null
   onPick: (project: ModProject, file: ModFile, source: 'modrinth' | 'curseforge') => void
 }
@@ -17,6 +18,7 @@ export default function ModPicker({
   loader,
   projectType,
   actionLabel = 'Установить',
+  autoLatest = false,
   busyId,
   onPick
 }: ModPickerProps): JSX.Element {
@@ -32,8 +34,10 @@ export default function ModPicker({
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [pickingId, setPickingId] = useState<string | null>(null)
   const offsetRef = useRef(0)
   const loadingMoreRef = useRef(false)
+  const pickingRef = useRef(false)
 
   useEffect(() => {
     search()
@@ -91,6 +95,26 @@ export default function ModPicker({
   }
 
   async function openProject(p: ModProject): Promise<void> {
+    if (autoLatest) {
+      if (pickingRef.current) return
+      pickingRef.current = true
+      setPickingId(p.id)
+      try {
+        const versions = await api.getModVersions(source, p.id, opts())
+        const file = latestModFile(versions)
+        if (!file) {
+          toast(`Нет совместимых файлов: ${p.title}`, 'error')
+          return
+        }
+        onPick(p, file, source)
+      } catch (e) {
+        toast(errText(e), 'error')
+      } finally {
+        pickingRef.current = false
+        setPickingId(null)
+      }
+      return
+    }
     setSelected(p)
     setFiles([])
     setLoadingFiles(true)
@@ -152,12 +176,12 @@ export default function ModPicker({
       ) : (
         <div className="mod-grid" onScroll={onGridScroll}>
           {results.map((p) => (
-            <div key={p.id} className="mod-card" onClick={() => openProject(p)}>
+            <div key={p.id} className={`mod-card ${pickingId === p.id ? 'busy' : ''}`} onClick={() => openProject(p)}>
               {p.iconUrl ? <img className="mod-icon" src={p.iconUrl} alt="" /> : <div className="mod-icon mod-icon-fallback">▦</div>}
               <div className="mod-body">
                 <strong>{p.title}</strong>
                 <span className="muted small">{p.author} · {formatDownloads(p.downloads)}</span>
-                <p className="mod-desc">{p.description}</p>
+                <p className="mod-desc">{pickingId === p.id ? 'Подбор последней совместимой версии…' : p.description}</p>
               </div>
             </div>
           ))}
